@@ -12,15 +12,26 @@
   const saveM = () => { try { localStorage.setItem("map.v2", JSON.stringify(M)); } catch (e) { /* 무시 */ } };
 
   // 발산형 색: 파랑 ← 회색 → 빨강 (국내 관행: 상승 빨강)
-  const STOPS = [[37, 99, 235], [157, 183, 234], [214, 214, 210], [230, 164, 156], [192, 57, 43]];
+  // 발산형 색 (파랑 ← 짙은 회색 → 빨강). 작은 변동도 보이도록 제곱근 스케일 + 오늘 분포 기준 한계값
+  const STOPS = [
+    [-1, [31, 95, 232]], [-0.5, [47, 85, 168]], [-0.15, [54, 69, 110]], [0, [61, 66, 80]],
+    [0.15, [106, 60, 70]], [0.5, [178, 58, 64]], [1, [242, 51, 58]],
+  ];
   function divColor(v, lim) {
-    if (v == null || isNaN(v)) return "rgb(200,200,196)";
-    const t = (Math.max(-lim, Math.min(lim, v)) / lim + 1) / 2 * (STOPS.length - 1);
-    const i = Math.min(STOPS.length - 2, Math.floor(t)), f = t - i;
-    const c = STOPS[i].map((a, k) => Math.round(a + (STOPS[i + 1][k] - a) * f));
-    return `rgb(${c})`;
+    if (v == null || isNaN(v)) return "rgb(70,74,84)";
+    let t = Math.min(1, Math.abs(v) / lim);
+    t = Math.abs(v) < lim * 0.02 ? 0 : Math.sign(v) * Math.sqrt(t);
+    let i = 0; while (i < STOPS.length - 2 && t > STOPS[i + 1][0]) i++;
+    const [p0, c0] = STOPS[i], [p1, c1] = STOPS[i + 1], f = Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
+    return `rgb(${c0.map((a, k) => Math.round(a + (c1[k] - a) * f))})`;
   }
-  const textOn = (v, lim) => Math.abs(v || 0) > lim * 0.45 ? "#fff" : "#1b1b1b";
+  // 화면에 그려지는 종목들의 |값| 92분위를 한계값으로: 조용한 날도 색 차이가 보이게
+  function autoLim(vals, floor) {
+    const a = vals.filter(v => v != null && isFinite(v)).map(Math.abs).sort((x, y) => x - y);
+    if (!a.length) return floor;
+    return Math.max(floor, a[Math.floor(a.length * 0.92)]);
+  }
+  const textOn = () => "#fff";
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // ---------- 툴팁 ----------
@@ -68,7 +79,9 @@
     const Y = v => m.t + (1 - (Math.max(-yl, Math.min(yl, v)) + yl) / (2 * yl)) * ih;
     // 버블 면적 ∝ 거래대금 (반지름 = 제곱근), 상한으로 대형주가 화면을 덮지 않게
     const R = r => Math.max(1.8, Math.min(W < 600 ? 11 : 18, Math.sqrt((r[p.amt] || 0) / 1e8) * (W < 600 ? 0.35 : 0.5)));
-    const col = r => M.color === "ret" ? divColor(r[p.ret], p.lim) : divColor(r[p.smart], 1.5);
+    const cKey = M.color === "ret" ? p.ret : p.smart;
+    const cLim = autoLim(rows.map(r => r[cKey]), M.color === "ret" ? 1 : 0.05);
+    const col = r => divColor(r[cKey], cLim);
     rows = rows.slice().sort((a, b) => (b[p.amt] || 0) - (a[p.amt] || 0)); // 큰 점 먼저 → 작은 점이 위
     const score = r => Math.log(Math.max(1, r[p.vr])) * Math.abs(r[p.ret]);
     const top = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, W < 600 ? 6 : 12);
@@ -119,13 +132,14 @@
       <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</span><span class="mut">${r[p.vr].toFixed(1)}x</span><span class="${fmt.cls(r[p.smart])} small">수급 ${fmt.pct(r[p.smart], 2)}</span></button>`).join("")}</div>`
       : `<div class="mut small">이 기간에 거래량 3배 이상 종목이 없습니다</div>`;
     $("#mapOutliers").querySelectorAll("button").forEach(b => b.onclick = () => openDetail(b.dataset.code));
-    $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, M.color === "ret" ? p.lim : 1.5, M.color === "ret" ? 0 : 1)
+    $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, cLim, M.color === "ret" ? 1 : 2)
       + `<span>점 크기 = ${p.amtLabel}</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
   function legend(title, lim, d) {
     const steps = [-1, -0.5, 0, 0.5, 1];
-    return `<span>${title}</span><span class="lg">${steps.map(s => `<i style="background:${divColor(s * lim, lim)}"></i>`).join("")}</span><span class="mut">−${lim.toFixed(d)}% … +${lim.toFixed(d)}%</span>`;
+    const steps7 = [-1, -0.5, -0.15, 0, 0.15, 0.5, 1];
+    return `<span>${title}</span><span class="lg">${steps7.map(s => `<i style="background:${divColor(Math.sign(s) * s * s * lim, lim)}"></i>`).join("")}</span><span class="mut">−${lim.toFixed(d)}% … +${lim.toFixed(d)}% (화면 종목 92%가 이 안, 작은 변동 강조)</span>`;
   }
 
   // ---------- ② 트리맵 ----------
@@ -159,9 +173,9 @@
     rows.forEach(r => (bySec[r.sector_name || "기타 업종"] ||= []).push(r));
     let secs = Object.entries(bySec).map(([k, v]) => [k, v, v.reduce((s, r) => s + r.marcap, 0)]).sort((a, b) => b[2] - a[2]);
     if (secs.length > SEC) { const rest = secs.slice(SEC).flatMap(s => s[1]); secs = secs.slice(0, SEC).concat([["기타 업종", rest, rest.reduce((s, r) => s + r.marcap, 0)]]); }
-    const col = r => M.color === "ret" ? divColor(r[p.ret], p.lim) : divColor(r[p.smart], 1.5);
     const val = r => M.color === "ret" ? r[p.ret] : r[p.smart];
-    const lim = M.color === "ret" ? p.lim : 1.5;
+    const lim = autoLim(rows.map(val), M.color === "ret" ? 1 : 0.05);
+    const col = r => divColor(val(r), lim);
     let html = "", idx = [], BAR = 0;
     if (ZOOM) {
       const hit = secs.find(x => x[0] === ZOOM);
@@ -210,7 +224,7 @@
       c.addEventListener("mouseleave", hideTip);
       c.addEventListener("click", () => { hideTip(); openDetail(r.code); });
     });
-    $("#treeLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, lim, M.color === "ret" ? 0 : 1)
+    $("#treeLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, lim, M.color === "ret" ? 1 : 2)
       + `<span>${ZOOM ? `면적 = 시가총액 · ${esc(ZOOM)} 전 종목` : `면적 = 시가총액 · 시총 상위 ${N} · 업종 이름을 누르면 그 업종만 확대`} · 업종 숫자는 시총가중 평균</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
