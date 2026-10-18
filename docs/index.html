@@ -56,7 +56,12 @@
   </section>
 
   <section id="tab-sector" class="tab">
-    <p class="hint">업종 수익률은 시총가중, 상대강도(RS)는 업종 간 백분위. 행을 누르면 전체 탭에서 그 업종만 봅니다.</p>
+    <div class="panel">
+      <div class="panel-h">업종별 변동률 추이 <span class="seg mini" id="secPeriods"></span></div>
+      <div class="sec-grid"><div class="chart sec-main" id="secChart"></div><div id="secRank" class="sec-rank"></div></div>
+      <div class="legend" id="secLegend"></div>
+    </div>
+    <p class="hint">아래 표의 업종 수익률은 시총가중(위 차트는 동일가중), 상대강도(RS)는 업종 간 백분위. 행을 누르면 업종 상세가 열립니다.</p>
     <div class="tablewrap"><table class="grid" id="sectorTable"></table></div>
   </section>
 
@@ -84,5 +89,6 @@
 <script src="app.js"></script>
 <script src="map.js"></script>
 <script src="detail.js"></script>
+<script src="sector.js"></script>
 </body>
 </html>

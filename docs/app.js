@@ -191,7 +191,7 @@ function renderSectors() {
   $("#sectorTable").innerHTML = `<thead><tr><th>업종</th><th>종목수</th><th>1일</th><th>5일</th><th>20일</th><th>60일</th><th>120일</th><th>RS60</th><th>RS120</th><th>200일선 위</th><th>외+기60 중앙값</th><th>거래대금20</th></tr></thead>
   <tbody>${rows.map(r => `<tr data-sec="${r.sector_name}"><td class="name">${r.sector_name}</td><td>${r.n}</td>${pctTd(r.ret_1d)}${pctTd(r.ret_5)}${pctTd(r.ret_20)}<td>${bar(r.ret_60)}</td>${pctTd(r.ret_120)}<td>${fmt.n(r.rs_60)}</td><td>${fmt.n(r.rs_120)}</td><td>${fmt.n(r.breadth_ma200)}%</td>${pctTd(r.frgn_60_pct, 2)}<td>${fmt.won(r.amount_avg20)}</td></tr>`).join("")}</tbody>`;
   $("#sectorTable").querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => {
-    $("#secSel").value = tr.dataset.sec; state.sector = tr.dataset.sec; switchTab("all"); renderAll();
+    window.openSector ? window.openSector(tr.dataset.sec) : (($("#secSel").value = tr.dataset.sec), switchTab("all"), renderAll());
   });
 }
 
@@ -303,6 +303,7 @@ function switchTab(id) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-" + id));
   try { localStorage.setItem("tab", id); } catch (e) { /* 무시 */ }
   if (id === "map" && window.renderMap) window.renderMap();
+  if (id === "sector" && window.renderSectorTab) window.renderSectorTab();
 }
 async function init() {
   $("#tabs").onclick = e => { const b = e.target.closest("button"); if (b) switchTab(b.dataset.tab); };

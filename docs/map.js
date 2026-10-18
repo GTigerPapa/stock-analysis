@@ -193,7 +193,6 @@
       if (!e.target.closest("svg")) return;
       ptrs.set(e.pointerId, svgPt(el, e)); el._dragged = false;
       start = { D: Object.assign({}, CUR.D), pts: new Map(ptrs) };
-      if (ptrs.size === 1) el.setPointerCapture?.(e.pointerId);
     });
     el.addEventListener("pointermove", e => {
       if (!ptrs.has(e.pointerId) || !start) return;
@@ -202,6 +201,7 @@
       if (ptrs.size === 1 && start.pts.size === 1) {
         const [x0, y0] = [...start.pts.values()][0], [x1, y1] = ptrs.get(e.pointerId);
         if (!el._dragged && Math.hypot(x1 - x0, y1 - y0) < 4) return;
+        if (!el._dragged) { try { el.setPointerCapture(e.pointerId); } catch (_) { /* 무시 */ } }
         el._dragged = true; hideTip();
         const dx = (x1 - x0) / iw * (S.lx1 - S.lx0), dy = (y1 - y0) / ih * (S.yb - S.ya);
         VIEW = { lx0: S.lx0 - dx, lx1: S.lx1 - dx, ya: S.ya + dy, yb: S.yb + dy, key: M.period + "|" + M.liquid };

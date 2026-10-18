@@ -259,3 +259,27 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 .m-zoom button:hover:not(:disabled) { border-color: var(--accent); }
 .m-zoom button:disabled { opacity: .35; cursor: default; }
 .m-zhint { position: absolute; top: 40px; right: 14px; font-size: 10.5px; color: var(--muted); pointer-events: none; }
+
+/* 섹터 탭 */
+.panel-h .seg.mini { margin-left: 10px; vertical-align: middle; }
+.sec-grid { display: grid; grid-template-columns: 1fr 250px; gap: 12px; }
+.chart.sec-main { height: 440px; }
+.sec-rank { height: 440px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.sr-h { position: sticky; top: 0; background: var(--panel); padding: 8px 10px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--line); }
+.sr-h .mut { font-weight: 400; }
+.sr-row { display: grid; grid-template-columns: 22px 10px 1fr auto; gap: 6px; align-items: center; padding: 5px 10px; font-size: 12.5px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.sr-row:hover { background: var(--accent-weak); }
+.sr-i { color: var(--muted); font-size: 11px; text-align: right; }
+.sr-dot { width: 9px; height: 9px; border-radius: 50%; }
+.sr-n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-row b { font-variant-numeric: tabular-nums; font-size: 12px; }
+@media (max-width: 760px) { .sec-grid { grid-template-columns: 1fr; } .chart.sec-main { height: 320px; } .sec-rank { height: 260px; } }
+.sec-kv { grid-template-columns: repeat(4, 1fr); margin: 10px 0 4px; }
+.chart.mid2 { height: 280px; }
+.sec-tbl tbody tr { cursor: pointer; }
+.sec-tbl tbody tr:hover td { background: var(--accent-weak); }
+.sec-tbl td.nm { text-align: left; font-weight: 600; }
+.sec-tbl td.nm small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.back-btn { position: sticky; top: 8px; z-index: 6; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; margin-bottom: 8px; }
+.back-btn:hover { border-color: var(--accent); }
+.sec-tbl th:nth-child(2) { text-align: left; }

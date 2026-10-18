@@ -117,6 +117,8 @@ def export_series(df: pd.DataFrame) -> None:
             "KOSDAQ": index_of(meta.index[meta.market == "KOSDAQ"]),
         },
         "sector": {},
+        "info": SECTOR_INFO,
+        "count": {k: int(v) for k, v in meta.groupby("sector_name").size().items()},
     }
     for sec, g in meta.groupby("sector_name"):
         v = index_of(g.index)

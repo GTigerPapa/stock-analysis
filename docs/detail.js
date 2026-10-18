@@ -40,14 +40,16 @@
   const STAGE = { 1: ["1단계 바닥", "rgba(140,150,165,.13)"], 2: ["2단계 상승", "rgba(47,140,120,.16)"], 3: ["3단계 천장", "rgba(214,160,60,.16)"], 4: ["4단계 하락", "rgba(209,69,59,.12)"] };
 
   // ---------- drawer ----------
-  window.openDetail = async function (code) {
+  window.openDetail = async function (code, o) {
+    const back = o && o.back ? `<button class="back-btn" id="backBtn">← ${esc(o.back)}</button>` : "";
+    const bindBack = () => { const b = $("#backBtn"); if (b) b.onclick = () => window.openSector(o.back); };
     const u = state.universe.find(r => r.code === code) || {};
     $("#detail").classList.add("on"); $("#scrim").classList.add("on"); $("#detail").setAttribute("aria-hidden", "false");
     const body = $("#detailBody");
-    body.innerHTML = `<div class="dh"><div class="meta">${code}</div><h2>${esc(u.name || "")}</h2><div class="empty">불러오는 중…</div></div>`;
+    body.innerHTML = `${back}<div class="dh"><div class="meta">${code}</div><h2>${esc(u.name || "")}</h2><div class="empty">불러오는 중…</div></div>`; bindBack();
     let d;
     try { d = await window.loadStock(code); } catch (e) {
-      body.innerHTML = `<div class="dh"><h2>${esc(u.name || code)}</h2><p class="hint">상세 데이터가 아직 없습니다. 다음 일일 실행에서 생성됩니다.</p></div>${featureGrid(u)}`;
+      body.innerHTML = `${back}<div class="dh"><h2>${esc(u.name || code)}</h2><p class="hint">상세 데이터가 아직 없습니다. 다음 일일 실행에서 생성됩니다.</p></div>${featureGrid(u)}`; bindBack();
       return;
     }
     await loadSeries();
@@ -56,7 +58,7 @@
     const st = stages(closes), curStage = st[st.length - 1];
     const dart = `https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm=${encodeURIComponent(d.name)}`;
     const naverUrl = `https://m.stock.naver.com/domestic/stock/${code}/total`;
-    body.innerHTML = `
+    body.innerHTML = `${back}
       ${d.sector_name ? `<div class="sec-banner"><b>${esc(d.sector_name)}</b> ${esc(d.sector_desc || "")}</div>` : ""}
       <div class="dh"><div class="meta">${code} · ${esc(d.market || "")} · 시총 ${fmt.won(f.marcap)}</div><h2>${esc(d.name)}
         ${curStage ? `<span class="stage-badge s${curStage}">${STAGE[curStage][0]}</span>` : ""}</h2>
@@ -96,6 +98,7 @@
 
       <details class="sec"><summary>전체 지표 보기</summary>${featureGrid(f)}</details>`;
 
+    bindBack();
     drawMain(d, st);
     drawVolumeProfile(d);
     drawRS(d, 250);
