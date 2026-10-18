@@ -1,0 +1,15 @@
+# secrets
+.env
+# local data (DB stays on the Mac; only docs/data/*.json is published)
+data/
+logs/
+# python
+.venv/
+venv*/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+# os
+.DS_Store

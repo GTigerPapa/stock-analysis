@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Stock Screener</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">KR</span>
+    <div>
+      <div class="title">국내 종목 정량분석</div>
+      <div class="asof" id="asof">불러오는 중…</div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="screen" class="on">스크리너</button>
+    <button data-tab="watch">관심종목</button>
+    <button data-tab="sector">섹터</button>
+    <button data-tab="all">전체</button>
+  </nav>
+</header>
+
+<main>
+  <section id="market" class="market"></section>
+
+  <section id="tab-screen" class="tab on">
+    <div class="chips" id="presetChips"></div>
+    <div class="preset-desc" id="presetDesc"></div>
+    <div class="tablewrap"><table class="grid" id="screenTable"></table></div>
+  </section>
+
+  <section id="tab-watch" class="tab">
+    <div class="cards" id="watchCards"></div>
+  </section>
+
+  <section id="tab-sector" class="tab">
+    <p class="hint">업종 수익률은 시총가중, 상대강도(RS)는 업종 간 백분위. 행을 누르면 전체 탭에서 그 업종만 봅니다.</p>
+    <div class="tablewrap"><table class="grid" id="sectorTable"></table></div>
+  </section>
+
+  <section id="tab-all" class="tab">
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="종목명·코드 검색" autocomplete="off">
+      <select id="mkt"><option value="">전체 시장</option><option>KOSPI</option><option>KOSDAQ</option></select>
+      <select id="secSel"><option value="">전체 업종</option></select>
+      <label class="chk"><input type="checkbox" id="liquid" checked> 거래대금 30억↑</label>
+      <span class="count" id="allCount"></span>
+    </div>
+    <div class="tablewrap"><table class="grid" id="allTable"></table></div>
+  </section>
+</main>
+
+<aside id="detail" class="detail" aria-hidden="true">
+  <div class="detail-inner">
+    <button class="close" id="closeDetail" aria-label="닫기">✕</button>
+    <div id="detailBody"></div>
+  </div>
+</aside>
+<div id="scrim" class="scrim"></div>
+
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

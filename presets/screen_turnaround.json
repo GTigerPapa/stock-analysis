@@ -1,0 +1,19 @@
+{
+  "name": "턴어라운드형",
+  "description": "분기 영업이익이 흑자전환 또는 급증(QoQ)했고 가격이 200일선 위로 돌아선 종목. 실적 개선 초입을 노리는 장기 진입 후보.",
+  "top_n": 30,
+  "filters": [
+    {"f": "amount_avg20", "op": ">=", "v": 2000000000},
+    {"f": "op_qoq", "op": "notnull", "v": null},
+    {"f": "close_vs_ma200", "op": ">", "v": -5}
+  ],
+  "score": [
+    {"f": "op_qoq", "w": 0.25},
+    {"f": "op_yoy", "w": 0.20},
+    {"f": "op_turnaround", "w": 0.10},
+    {"f": "rev_yoy", "w": 0.10},
+    {"f": "op_trend_4q", "w": 0.10},
+    {"f": "slope_60", "w": 0.10},
+    {"f": "smart_net_60_pct", "w": 0.15}
+  ]
+}
