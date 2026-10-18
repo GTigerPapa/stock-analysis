@@ -2,13 +2,14 @@
    app.js 의 state / fmt / $ / openDetail 을 그대로 사용 */
 (function () {
   const P = {
-    "1": { ret: "ret_1d", vr: "vol_ratio20", smart: "smart_net_5_pct", vrLabel: "오늘 거래량 ÷ 20일 평균", lim: 10, flow: "외+기 5일" },
-    "5": { ret: "ret_5", vr: "vr5", smart: "smart_net_5_pct", vrLabel: "최근 5일 평균 거래량 ÷ 직전 60일 평균", lim: 15, flow: "외+기 5일" },
-    "20": { ret: "ret_20", vr: "vr20", smart: "smart_net_20_pct", vrLabel: "최근 20일 평균 거래량 ÷ 직전 120일 평균", lim: 25, flow: "외+기 20일" },
+    "1": { amt: "amount", amtLabel: "당일 거래대금", ret: "ret_1d", vr: "vol_ratio20", smart: "smart_net_5_pct", vrLabel: "오늘 거래량 ÷ 20일 평균", lim: 10, flow: "외+기 5일" },
+    "5": { amt: "amount_avg5", amtLabel: "5일 평균 거래대금", ret: "ret_5", vr: "vr5", smart: "smart_net_5_pct", vrLabel: "최근 5일 평균 거래량 ÷ 직전 60일 평균", lim: 15, flow: "외+기 5일" },
+    "20": { amt: "amount_avg20", amtLabel: "20일 평균 거래대금", ret: "ret_20", vr: "vr20", smart: "smart_net_20_pct", vrLabel: "최근 20일 평균 거래량 ÷ 직전 120일 평균", lim: 25, flow: "외+기 20일" },
   };
-  const M = { period: "1", color: "ret", liquid: true };
-  try { Object.assign(M, JSON.parse(localStorage.getItem("map.v1") || "{}")); } catch (e) { /* 무시 */ }
-  const saveM = () => { try { localStorage.setItem("map.v1", JSON.stringify(M)); } catch (e) { /* 무시 */ } };
+  const M = { period: "1", color: "smart", liquid: true };
+  let ZOOM = null; // 시장 지도 확대 중인 업종
+  try { Object.assign(M, JSON.parse(localStorage.getItem("map.v2") || "{}")); } catch (e) { /* 무시 */ }
+  const saveM = () => { try { localStorage.setItem("map.v2", JSON.stringify(M)); } catch (e) { /* 무시 */ } };
 
   // 발산형 색: 파랑 ← 회색 → 빨강 (국내 관행: 상승 빨강)
   const STOPS = [[37, 99, 235], [157, 183, 234], [214, 214, 210], [230, 164, 156], [192, 57, 43]];
@@ -30,7 +31,7 @@
       <div>등락(${M.period}일) <b class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</b></div>
       <div>거래량 배수 <b>${r[p.vr] == null ? "–" : r[p.vr].toFixed(1) + "x"}</b></div>
       <div>${p.flow} 순매수 <b class="${fmt.cls(r[p.smart])}">${fmt.pct(r[p.smart], 2)}</b></div>
-      <div>거래대금(20일 평균) <b>${fmt.won(r.amount_avg20)}</b> · 시총 <b>${fmt.won(r.marcap)}</b></div>`;
+      <div>${p.amtLabel} <b>${fmt.won(r[p.amt])}</b> · 시총 <b>${fmt.won(r.marcap)}</b></div>`;
     tip.style.display = "block";
     const W = innerWidth, x = e.clientX, y = e.clientY;
     tip.style.left = Math.min(W - tip.offsetWidth - 8, x + 14) + "px";
@@ -65,9 +66,10 @@
     const yl = Math.ceil(raw / step) * step;
     const X = v => m.l + (Math.log(Math.max(0.15, Math.min(40, v))) - x0) / (x1 - x0) * iw;
     const Y = v => m.t + (1 - (Math.max(-yl, Math.min(yl, v)) + yl) / (2 * yl)) * ih;
-    const R = r => Math.max(2, Math.min(W < 600 ? 8 : 12, Math.sqrt((r.amount_avg20 || 0) / 1e8) * (W < 600 ? 0.45 : 0.6)));
+    // 버블 면적 ∝ 거래대금 (반지름 = 제곱근), 상한으로 대형주가 화면을 덮지 않게
+    const R = r => Math.max(1.8, Math.min(W < 600 ? 11 : 18, Math.sqrt((r[p.amt] || 0) / 1e8) * (W < 600 ? 0.35 : 0.5)));
     const col = r => M.color === "ret" ? divColor(r[p.ret], p.lim) : divColor(r[p.smart], 1.5);
-    rows = rows.slice().sort((a, b) => (b.amount_avg20 || 0) - (a.amount_avg20 || 0)); // 큰 점 먼저 → 작은 점이 위
+    rows = rows.slice().sort((a, b) => (b[p.amt] || 0) - (a[p.amt] || 0)); // 큰 점 먼저 → 작은 점이 위
     const score = r => Math.log(Math.max(1, r[p.vr])) * Math.abs(r[p.ret]);
     const top = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, W < 600 ? 6 : 12);
     const topSet = new Set(top.map(r => r.code));
@@ -118,7 +120,7 @@
       : `<div class="mut small">이 기간에 거래량 3배 이상 종목이 없습니다</div>`;
     $("#mapOutliers").querySelectorAll("button").forEach(b => b.onclick = () => openDetail(b.dataset.code));
     $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, M.color === "ret" ? p.lim : 1.5, M.color === "ret" ? 0 : 1)
-      + `<span>점 크기 = 평소 거래대금</span><span><i class="ring"></i>보유 종목</span>`;
+      + `<span>점 크기 = ${p.amtLabel}</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
   function legend(title, lim, d) {
@@ -160,10 +162,23 @@
     const col = r => M.color === "ret" ? divColor(r[p.ret], p.lim) : divColor(r[p.smart], 1.5);
     const val = r => M.color === "ret" ? r[p.ret] : r[p.smart];
     const lim = M.color === "ret" ? p.lim : 1.5;
-    const outer = squarify(secs.map(s => s[2]), 0, 0, W, H);
-    let html = "", idx = [];
+    let html = "", idx = [], BAR = 0;
+    if (ZOOM) {
+      const hit = secs.find(x => x[0] === ZOOM);
+      const list = ZOOM === "기타 업종" && hit ? hit[1]
+        : state.universe.filter(r => r.marcap > 0 && r[p.ret] != null && (r.sector_name || "기타 업종") === ZOOM);
+      if (!list.length) ZOOM = null;
+      else {
+        BAR = 30;
+        const sw = list.reduce((a, r) => a + r.marcap, 0), sv = list.reduce((a, r) => a + r.marcap * (val(r) || 0), 0) / (sw || 1);
+        secs = [[ZOOM, list, sw]];
+        html += `<g class="t-back" data-back="1"><rect x="0" y="0" width="${W}" height="${BAR - 2}" class="t-barbg"/>
+          <text x="10" y="19" class="t-bar">◀ ${esc(ZOOM)} <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%</tspan> <tspan class="t-barsub">· ${list.length}종목 · 누르면 전체 업종으로</tspan></text></g>`;
+      }
+    }
+    const outer = squarify(secs.map(s => s[2]), 0, BAR, W, H - BAR);
     secs.forEach(([name, list], si) => {
-      const o = outer[si], hdr = o.w > 70 && o.h > 44 ? 17 : 0, pad = 1.5;
+      const o = outer[si], hdr = !ZOOM && o.w > 70 && o.h > 44 ? 17 : 0, pad = 1.5;
       list.sort((a, b) => b.marcap - a.marcap);
       const inner = squarify(list.map(r => r.marcap), o.x + pad, o.y + pad + hdr, Math.max(1, o.w - 2 * pad), Math.max(1, o.h - 2 * pad - hdr));
       // 업종 시총가중 등락
@@ -172,7 +187,7 @@
         const pctTxt = `${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%`;
         const full = name.length * 11 + pctTxt.length * 7 + 14 < o.w;
         const nm = fit(name, o.w - 10 - (full ? pctTxt.length * 7 + 4 : 0), 11);
-        html += `<text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${pctTxt}</tspan>` : ""}</text>`;
+        html += `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${hdr + 1}" class="t-hdr" data-sec="${esc(name)}"><title>${esc(name)} 확대</title></rect><text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${pctTxt}</tspan>` : ""}</text>`;
       }
       list.forEach((r, k) => {
         const q = inner[k]; idx.push(r);
@@ -187,6 +202,8 @@
       });
     });
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="업종별 시가총액 트리맵">${html}</svg>`;
+    el.querySelectorAll("rect.t-hdr").forEach(h => h.addEventListener("click", () => { hideTip(); ZOOM = h.dataset.sec; treemap(); }));
+    const back = el.querySelector("[data-back]"); if (back) back.addEventListener("click", () => { ZOOM = null; treemap(); });
     el.querySelectorAll("rect.t-cell").forEach(c => {
       const r = idx[+c.dataset.i];
       c.addEventListener("mousemove", e => showTip(e, r));
@@ -194,7 +211,7 @@
       c.addEventListener("click", () => { hideTip(); openDetail(r.code); });
     });
     $("#treeLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, lim, M.color === "ret" ? 0 : 1)
-      + `<span>면적 = 시가총액 · 시총 상위 ${N} · 업종 옆 숫자는 시총가중 평균</span><span><i class="ring"></i>보유 종목</span>`;
+      + `<span>${ZOOM ? `면적 = 시가총액 · ${esc(ZOOM)} 전 종목` : `면적 = 시가총액 · 시총 상위 ${N} · 업종 이름을 누르면 그 업종만 확대`} · 업종 숫자는 시총가중 평균</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
   function render() {

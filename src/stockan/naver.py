@@ -242,3 +242,24 @@ def finance(code: str, period_type: str = "quarter") -> list[dict]:
                 }
             )
     return rows
+
+
+def company_description(code: str) -> str | None:
+    """WiseReport(네이버 기업정보 제공처) 기업개요 문단."""
+    import re as _re
+
+    url = f"https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd={code}"
+    for i in range(2):
+        try:
+            r = _session().get(url, timeout=15, headers={"Accept": "text/html"})
+            if r.status_code != 200:
+                return None
+            m = _re.search(r'<div class="cmp_comment">(.*?)</div>', r.text, _re.S)
+            if not m:
+                return None
+            txt = _re.sub(r"<[^>]+>", " ", m.group(1))
+            txt = _re.sub(r"\s+", " ", txt).strip()
+            return txt or None
+        except requests.RequestException:
+            time.sleep(1 + i)
+    return None

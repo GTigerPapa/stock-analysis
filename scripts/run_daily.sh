@@ -13,9 +13,10 @@ mkdir -p logs
   rc=$?
   echo "pipeline rc=$rc"
   if [ -d .git ]; then
-    git add docs/data presets >/dev/null 2>&1
+    git add -A >/dev/null 2>&1   # .gitignore 가 .env·DB·로그를 막음 → 코드 변경도 함께 올라감
     if ! git diff --cached --quiet; then
-      git commit -q -m "data: $(date '+%F') 일일 업데이트" && git push -q origin HEAD && echo "pushed"
+      git commit -q -m "daily: $(date '+%F') 데이터·코드 업데이트" && git push -q origin HEAD && echo "pushed"
+      git gc --auto -q   # 매일 2,600여 개 파일이 바뀌므로 임시 객체 정리
     else
       echo "no data change"
     fi

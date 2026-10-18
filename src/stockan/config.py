@@ -25,9 +25,9 @@ KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
 KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
 
 # 백필 기간 (영업일 기준 ~3년 + 지표 워밍업 여유)
-BACKFILL_YEARS = 3
-# 투자자별 수급 백필 깊이 (영업일). 네이버 trend API 1페이지 = 최대 100행
-INVESTOR_BACKFILL_DAYS = 250
+BACKFILL_YEARS = 5
+# 투자자별 수급 백필 깊이 (영업일, 약 5년). 네이버 trend API 호출당 최대 60행
+INVESTOR_BACKFILL_DAYS = 1250
 
 
 def load_watchlist() -> list[dict]:

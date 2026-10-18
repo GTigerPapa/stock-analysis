@@ -5,7 +5,7 @@
   python -m stockan.run_daily               # 매일 20:30: 증분 수집 → 지표 → export
   python -m stockan.run_daily --only prices,features   # 단계 선택 실행
   python -m stockan.run_daily --codes 272210,267260 --only prices,investor   # 특정 종목만
-단계: universe, sectors, prices, investor, fundamentals, finance, features, export
+단계: universe, sectors, prices, investor, fundamentals, finance, profiles, features, export (+ history: 과거 확장)
 """
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from .db import init_schema, read_df, session, log
 from .export import export_all
 from .indicators import build_features
 
-ALL_STEPS = ["universe", "sectors", "prices", "investor", "fundamentals", "finance", "features", "export"]
+ALL_STEPS = ["universe", "sectors", "prices", "investor", "fundamentals", "finance", "profiles", "features", "export"]
 # 매일 돌릴 필요 없는 단계: 업종은 주 1회(월), 재무는 주 1회(금) — --init 또는 --only 로 강제 가능
-WEEKLY = {"sectors": 0, "finance": 4}
+WEEKLY = {"sectors": 0, "finance": 4, "profiles": 5}
 
 
 def setup_logging() -> None:
@@ -74,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
                 collect.update_investor(codes, full=full)
             elif step == "fundamentals":
                 collect.update_fundamentals(codes)
+            elif step == "history":
+                collect.extend_prices(codes)
+                collect.extend_investor(codes)
+            elif step == "profiles":
+                collect.update_profiles(codes, only_missing=full)
             elif step == "finance":
                 collect.update_finance(codes, resume=full)
             elif step == "features":

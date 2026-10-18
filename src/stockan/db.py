@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS features (
     code TEXT, date TEXT, payload TEXT,
     PRIMARY KEY (code, date)
 );
+CREATE TABLE IF NOT EXISTS profiles (
+    code TEXT PRIMARY KEY, description TEXT, updated_at TEXT
+);
 CREATE TABLE IF NOT EXISTS run_log (
     run_at TEXT, step TEXT, status TEXT, detail TEXT
 );

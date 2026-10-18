@@ -104,6 +104,7 @@ def stock_features(px: pd.DataFrame, shares: float | None) -> dict:
     if len(v) >= 140:
         base = v.iloc[-140:-20].mean()
         f["vr20"] = float(v.tail(20).mean() / base) if base else np.nan
+    f["amount_avg5"] = float(px["amount"].tail(5).mean())
     f["amount_avg20"] = float(px["amount"].tail(20).mean())
     f["amount_avg60"] = float(px["amount"].tail(60).mean())
     obv = (np.sign(c.diff()).fillna(0) * v).cumsum()
@@ -183,7 +184,7 @@ def build_features() -> pd.DataFrame:
         """SELECT code,date,open,high,low,close,volume,amount FROM prices
            WHERE venue='KRX' AND date >= date((SELECT MAX(date) FROM prices),'-450 day') ORDER BY code,date"""
     )
-    inv = read_df("SELECT * FROM investor ORDER BY code,date")
+    inv = read_df("SELECT * FROM investor WHERE date >= date((SELECT MAX(date) FROM investor),'-300 day') ORDER BY code,date")
     fnd = read_df("SELECT * FROM fundamentals WHERE date=(SELECT MAX(date) FROM fundamentals)").set_index("code")
     fin = read_df("SELECT * FROM finance")
     latest = px["date"].max()

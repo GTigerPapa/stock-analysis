@@ -10,6 +10,7 @@ import pandas as pd
 
 from .config import DOCS_DATA, load_presets, load_watchlist
 from .db import read_df
+from .detail_export import export_details, export_series
 from .holdings import diff as holdings_diff, evaluate as holdings_eval
 from .indicators import sector_table
 from .screener import run_all
@@ -23,7 +24,7 @@ UNIVERSE_COLS = [
     "frgn_net_60_pct", "inst_net_60_pct", "foreign_ratio", "foreign_ratio_chg_60", "smart_buy_streak",
     "per", "pbr", "div_yield", "target_upside", "op_qoq", "op_yoy", "rev_yoy", "op_margin_q",
     "excess_60", "excess_120", "sector_rs_60", "rank_in_sector_60", "sector_size", "nxt_close", "nxt_gap", "rsi14",
-    "vr5", "vr20", "smart_net_5_pct", "ret_250_pct_rank",
+    "vr5", "vr20", "smart_net_5_pct", "ret_250_pct_rank", "amount", "amount_avg5",
 ]
 PRESET_COLS = ["rank", "score"] + UNIVERSE_COLS
 
@@ -139,17 +140,12 @@ def export_all(df: pd.DataFrame) -> None:
     _dump("latest.json", latest)
     _dump("universe.json", {"asof": asof, "rows": _records(df, UNIVERSE_COLS)})
 
-    # 종목 상세: 관심종목 + 프리셋 상위 전부
-    detail_codes = set(wcodes)
-    for r in results.values():
-        detail_codes |= set(r["code"].tolist())
-    (DOCS_DATA / "stock").mkdir(exist_ok=True)  # 이전 파일은 덮어쓰기(삭제 불필요)
-    for c in detail_codes:
-        if c in byc:
-            _dump(f"stock/{c}.json", _stock_detail(c, byc[c]))
+    # 종목 상세: 전 종목 + 업종/시장 지수 시계열
+    n_detail = export_details(df)
+    export_series(df)
     # 히스토리(일별 프리셋 상위 10 기록 → 나중에 백테스트·추적용)
     hist_p = DOCS_DATA / "history.json"
     hist = json.loads(hist_p.read_text(encoding="utf-8")) if hist_p.exists() else {}
     hist[asof] = {pid: r.head(10)[["code", "name", "close", "score"]].to_dict("records") for pid, r in results.items()}
     _dump("history.json", hist)
-    logger.info("export 완료: %s, 상세 %d종목", asof, len(detail_codes))
+    logger.info("export 완료: %s, 상세 %d종목", asof, n_detail)

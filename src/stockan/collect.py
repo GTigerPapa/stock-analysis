@@ -222,3 +222,87 @@ def update_finance(codes: list[str] | None = None, resume: bool = False) -> None
         for _, rows in _parallel(job, codes, "재무"):
             n += upsert(con, "finance", rows)
         log(con, "finance", "ok", f"{n} rows")
+
+
+# ---------------- 과거 확장 (백필 기간을 늘렸을 때 앞쪽만 채움) ----------------
+def extend_prices(codes: list[str] | None = None) -> None:
+    codes = codes or universe_codes()
+    target = (date.today() - timedelta(days=365 * BACKFILL_YEARS + 30)).isoformat()
+    with session() as con:
+        first = dict(con.execute("SELECT code, MIN(date) FROM prices WHERE venue='KRX' GROUP BY code"))
+    todo = [c for c in codes if first.get(c) and first[c] > target
+            and (date.fromisoformat(first[c]) - date.fromisoformat(target)).days > 20]
+    # 상장일이 target 이후인 종목은 계속 todo 에 남지 않도록 표시 테이블 사용
+    with session() as con:
+        con.execute("CREATE TABLE IF NOT EXISTS backfill_done (kind TEXT, code TEXT, PRIMARY KEY(kind, code))")
+        done = {r[0] for r in con.execute("SELECT code FROM backfill_done WHERE kind='prices'")}
+    todo = [c for c in todo if c not in done]
+    logger.info("일봉 과거 확장 대상 %d종목 (목표 시작일 %s)", len(todo), target)
+
+    def job(code):
+        end = (date.fromisoformat(first[code]) - timedelta(days=1)).isoformat()
+        rows = naver.daily_chart(code, target, end)
+        return [
+            {"code": code, "date": r["date"], "venue": "KRX", "open": r["open"], "high": r["high"], "low": r["low"],
+             "close": r["close"], "volume": r["volume"], "amount": r["close"] * r["volume"], "change": None}
+            for r in rows
+        ]
+
+    n = 0
+    with session() as con:
+        for code, rows in _parallel(job, todo, "일봉 과거"):
+            n += upsert(con, "prices", rows)
+            con.execute("INSERT OR IGNORE INTO backfill_done VALUES ('prices', ?)", (code,))
+        log(con, "extend_prices", "ok", f"{n} rows")
+
+
+def extend_investor(codes: list[str] | None = None) -> None:
+    codes = codes or universe_codes()
+    target = (date.today() - timedelta(days=int(INVESTOR_BACKFILL_DAYS * 1.46))).isoformat()
+    with session() as con:
+        con.execute("CREATE TABLE IF NOT EXISTS backfill_done (kind TEXT, code TEXT, PRIMARY KEY(kind, code))")
+        first = dict(con.execute("SELECT code, MIN(date) FROM investor GROUP BY code"))
+        done = {r[0] for r in con.execute("SELECT code FROM backfill_done WHERE kind='investor'")}
+    todo = [c for c in codes if c not in done and (c not in first or first[c] > target)]
+    logger.info("수급 과거 확장 대상 %d종목 (목표 시작일 %s)", len(todo), target)
+
+    def job(code):
+        rows, before = [], (first.get(code) or date.today().isoformat())
+        while before > target:
+            got = naver.trend(code, before=before, page_size=60)
+            if not got:
+                break
+            rows += got
+            if len(got) < 60:
+                break
+            before = got[-1]["date"]
+        return rows
+
+    n = 0
+    with session() as con:
+        for code, rows in _parallel(job, todo, "수급 과거"):
+            n += upsert(con, "investor", rows)
+            con.execute("INSERT OR IGNORE INTO backfill_done VALUES ('investor', ?)", (code,))
+            con.commit()
+        log(con, "extend_investor", "ok", f"{n} rows")
+
+
+# ---------------- 종목 설명 (주 1회) ----------------
+def update_profiles(codes: list[str] | None = None, only_missing: bool = False) -> None:
+    codes = codes or universe_codes()
+    today = date.today().isoformat()
+    if only_missing:
+        with session() as con:
+            have = {r[0] for r in con.execute("SELECT code FROM profiles WHERE description IS NOT NULL")}
+        codes = [c for c in codes if c not in have]
+
+    def job(code):
+        return naver.company_description(code)
+
+    n = 0
+    with session() as con:
+        for code, desc in _parallel(job, codes, "종목 설명"):
+            if desc:
+                con.execute("INSERT OR REPLACE INTO profiles VALUES (?,?,?)", (code, desc, today))
+                n += 1
+        log(con, "profiles", "ok", f"{n} rows")
