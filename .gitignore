@@ -1,8 +1,8 @@
 # secrets
 .env
 # local data (DB stays on the Mac; only docs/data/*.json is published)
-data/
-logs/
+/data/
+/logs/
 # python
 .venv/
 venv*/
@@ -13,3 +13,4 @@ build/
 dist/
 # os
 .DS_Store
+_to_delete/
