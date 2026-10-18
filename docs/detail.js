@@ -9,6 +9,8 @@
   const isDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
   const UP = "#d1453b", DN = "#2f6fe0";
   const UPa = a => `rgba(209,69,59,${a})`, DNa = a => `rgba(47,111,224,${a})`;
+  const FR = () => css("--frgn") || "#2dd4bf", IN = () => css("--inst") || "#fbbf24";
+  const rgba = (hex, a) => { const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
 
   window.loadStock = async function (code) {
     if (CACHE[code]) return CACHE[code];
@@ -72,7 +74,7 @@
         <div class="legend"><span><i style="background:#e0a100"></i>MA20</span><span><i style="background:#2f8c78"></i>MA60</span><span><i style="background:#8b5cf6"></i>MA120</span><span><i style="background:#8a94a3"></i>MA200</span>
           ${[1, 2, 3, 4].map(s => `<span><i class="sw" style="background:${STAGE[s][1].replace(/[\d.]+\)$/, ".7)")}"></i>${STAGE[s][0]}</span>`).join("")}</div></div>
 
-      <div class="sec"><h4>외국인 · 기관 일별 순매수 <span class="mut">위 = 외국인 · 아래 = 기관 · 막대 길이 = 규모, 색 = 빨강 순매수 / 파랑 순매도</span></h4>
+      <div class="sec"><h4><span class="c-frgn">외국인</span>·<span class="c-inst">기관</span> 일별 순매수 <span class="mut">위 띠 = 외국인 · 아래 띠 = 기관 · 기준선 위로 = 순매수, 아래로 = 순매도(연하게) · 두 띠 같은 눈금</span></h4>
         <div class="chart mid" id="chFlow"></div><div class="flow-sum" id="flowSum"></div></div>
 
       <div class="sec"><h4>거래량 배수 <span class="mut">그날 거래량 ÷ 20·60·120일 평균 (로그 축, 1x = 평소)</span>
@@ -150,20 +152,30 @@
       s.setData(dates.map((t, i) => m[i] == null ? { time: t } : { time: t, value: m[i] }));
     });
 
-    // 수급 butterfly (같은 날짜축, 없는 날은 빈 칸)
+    // 수급: 위 띠 = 외국인, 아래 띠 = 기관 (각자 기준선, 위로 = 순매수 / 아래로 = 순매도)
     const invMap = new Map((d.inv || []).map(r => [r[0], r]));
     const c2 = LightweightCharts.createChart($("#chFlow"), Object.assign(baseOpts(), {
-      localization: { locale: "ko-KR", priceFormatter: v => Math.abs(Math.round(v)).toLocaleString("ko-KR") },
+      rightPriceScale: { visible: false }, leftPriceScale: { visible: false },
     })); charts.push(c2);
-    const fS = c2.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, base: 0 });
-    const iS = c2.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, base: 0 });
-    fS.setData(dates.map(t => { const r = invMap.get(t); return r && r[1] != null ? { time: t, value: Math.abs(r[1]), color: r[1] >= 0 ? UPa(.85) : DNa(.85) } : { time: t }; }));
-    iS.setData(dates.map(t => { const r = invMap.get(t); return r && r[2] != null ? { time: t, value: -Math.abs(r[2]), color: r[2] >= 0 ? UPa(.55) : DNa(.55) } : { time: t }; }));
-    fS.createPriceLine({ price: 0, color: isDark() ? "#5b636c" : "#b9b9b4", lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
+    const fS = c2.addHistogramSeries({ priceScaleId: "f", lastValueVisible: false, priceLineVisible: false, color: FR(), base: 0 });
+    const iS = c2.addHistogramSeries({ priceScaleId: "i", lastValueVisible: false, priceLineVisible: false, color: IN(), base: 0 });
+    // 두 띠의 세로 스케일을 같게(같은 주식 수 = 같은 막대 길이) — 최대 절대값 기준 대칭
+    // 눈금 = 상위 2% 극단값을 제외한 최대치 (튀는 날 하나가 전체를 납작하게 만들지 않게; 그런 날은 띠 끝에서 잘림)
+    const absV = (d.inv || []).flatMap(r => [Math.abs(r[1] || 0), Math.abs(r[2] || 0)]).sort((a, b) => a - b);
+    const mxv = Math.max(1, (absV[Math.floor(absV.length * 0.98)] || 1) * 1.1);
+    const sym = () => ({ priceRange: { minValue: -mxv, maxValue: mxv } });
+    fS.applyOptions({ autoscaleInfoProvider: sym }); iS.applyOptions({ autoscaleInfoProvider: sym });
+    c2.priceScale("f").applyOptions({ scaleMargins: { top: 0.04, bottom: 0.54 } });
+    c2.priceScale("i").applyOptions({ scaleMargins: { top: 0.54, bottom: 0.04 } });
+    fS.setData(dates.map(t => { const r = invMap.get(t); return r && r[1] != null ? { time: t, value: r[1], color: r[1] >= 0 ? FR() : rgba(FR(), .55) } : { time: t }; }));
+    iS.setData(dates.map(t => { const r = invMap.get(t); return r && r[2] != null ? { time: t, value: r[2], color: r[2] >= 0 ? IN() : rgba(IN(), .55) } : { time: t }; }));
+    const zc = isDark() ? "#5b636c" : "#b9b9b4";
+    fS.createPriceLine({ price: 0, color: zc, lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
+    iS.createPriceLine({ price: 0, color: zc, lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
     const sumN = n => { const rs = (d.inv || []).slice(-n); return [rs.reduce((s, r) => s + (r[1] || 0), 0), rs.reduce((s, r) => s + (r[2] || 0), 0)]; };
     const [f20, i20] = sumN(20), [f60, i60] = sumN(60);
-    const k = v => `<b class="${fmt.cls(v)}">${v > 0 ? "+" : ""}${Math.round(v / 1000).toLocaleString()}천 주</b>`;
-    $("#flowSum").innerHTML = `<span>외국인 20일 ${k(f20)} · 60일 ${k(f60)}</span><span>기관 20일 ${k(i20)} · 60일 ${k(i60)}</span>`;
+    const k = v => `<b>${v > 0 ? "+" : ""}${Math.round(v / 1000).toLocaleString()}천 주</b> ${v >= 0 ? "순매수" : "순매도"}`;
+    $("#flowSum").innerHTML = `<span><span class="c-frgn">외국인</span> 20일 ${k(f20)} · 60일 ${k(f60)}</span><span><span class="c-inst">기관</span> 20일 ${k(i20)} · 60일 ${k(i60)}</span>`;
 
     // 거래량 배수
     const c3 = LightweightCharts.createChart($("#chVr"), Object.assign(baseOpts(), {
@@ -327,20 +339,22 @@
     const wk = t => Math.floor((new Date(t) - t0) / 864e5 / 7 + (t0.getDay() - 1) / 7);
     const weeks = wk(inv[inv.length - 1][0]) + 1;
     const W = 40 + weeks * (cell + gapW), rowsH = 5 * (cell + gapW);
-    const color = r => { const a = Math.min(1, Math.abs(r) / 0.25); return r > 0 ? UPa(.15 + .85 * a) : r < 0 ? DNa(.15 + .85 * a) : "rgba(140,140,140,.15)"; };
+    const gray = isDark() ? "150,156,168" : "95,100,112";
+    const colorOf = (hex) => r => { const a = Math.min(1, Math.abs(r) / 0.25); return r > 0 ? rgba(hex, .15 + .85 * a) : r < 0 ? `rgba(${gray},${.12 + .7 * a})` : "rgba(140,140,140,.12)"; };
+    const COL = { 1: colorOf(FR()), 2: colorOf(IN()) };
     let s = `<svg viewBox="0 0 ${W} ${rowsH * 2 + 50}" class="cal">`;
     [["외국인", 1, 14], ["기관", 2, 14 + rowsH + 22]].forEach(([lab, col, y0]) => {
-      s += `<text x="0" y="${y0 + rowsH / 2 + 3}" class="pl">${lab}</text>`;
+      s += `<text x="0" y="${y0 + rowsH / 2 + 3}" class="pl" style="fill:${col === 1 ? FR() : IN()};font-weight:700">${lab}</text>`;
       inv.forEach(r => {
         const dt = new Date(r[0]), dw = dt.getDay() - 1; if (dw < 0 || dw > 4) return;
         const a = avg.get(r[0]); const v = r[col]; if (v == null || !a) return;
         const x = 40 + wk(r[0]) * (cell + gapW), y = y0 + dw * (cell + gapW);
-        s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${color(v / a)}"><title>${r[0]} ${lab} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString()}주 (평균 거래량의 ${(v / a * 100).toFixed(0)}%)</title></rect>`;
+        s += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${COL[col](v / a)}"><title>${r[0]} ${lab} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString()}주 (평균 거래량의 ${(v / a * 100).toFixed(0)}%)</title></rect>`;
       });
     });
     let lastM = "";
     inv.forEach(r => { const m = r[0].slice(0, 7); if (m !== lastM && new Date(r[0]).getDate() <= 7) { lastM = m; s += `<text x="${40 + wk(r[0]) * (cell + gapW)}" y="8" class="ax">${m.slice(2).replace("-", ".")}</text>`; } });
-    el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0, .5, 1].map(v => `<i style="background:${color(v * .25)}"></i>`).join("")}</span><span>순매수 (평균 거래량의 ±25%에서 가장 진함)</span></div>`;
+    el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}</span><span>순매수</span><span class="lg">${[.5, 1].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}${[.5, 1].map(v => `<i style="background:${COL[2](v * .25)}"></i>`).join("")}</span><span class="mut">순매수 = 고유색 진하게(<span class="c-frgn">외국인</span>/<span class="c-inst">기관</span>) · 순매도 = 회색 진하게 · 평균 거래량의 ±25%에서 가장 진함</span></div>`;
   }
 
   // ---------- 월별 Trend (전월비) ----------

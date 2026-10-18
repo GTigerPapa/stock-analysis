@@ -283,3 +283,11 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 .back-btn { position: sticky; top: 8px; z-index: 6; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; margin-bottom: 8px; }
 .back-btn:hover { border-color: var(--accent); }
 .sec-tbl th:nth-child(2) { text-align: left; }
+
+/* 수급 색 체계: 가격 등락(빨강/파랑)과 분리
+   투자자 구분 = 외국인 청록 · 기관 앰버 / 합산 수급 방향 = 순매수 청록 · 순매도 보라 */
+:root { --frgn: #0f9f8f; --inst: #c97a06; --flow-up: #0f9f8f; --flow-dn: #7c5cd6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --frgn: #2dd4bf; --inst: #fbbf24; --flow-up: #2dd4bf; --flow-dn: #a78bfa; } }
+.fl-up { color: var(--flow-up); } .fl-dn { color: var(--flow-dn); }
+.c-frgn { color: var(--frgn); font-weight: 700; } .c-inst { color: var(--inst); font-weight: 700; }
+.t-sec .t-fu, .t-bar .t-fu { fill: #5eead4; } .t-sec .t-fd, .t-bar .t-fd { fill: #c4b5fd; }

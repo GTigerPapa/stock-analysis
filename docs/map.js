@@ -17,12 +17,18 @@
     [-1, [31, 95, 232]], [-0.5, [47, 85, 168]], [-0.15, [54, 69, 110]], [0, [61, 66, 80]],
     [0.15, [106, 60, 70]], [0.5, [178, 58, 64]], [1, [242, 51, 58]],
   ];
-  function divColor(v, lim) {
+  // 수급(외+기) 모드: 순매도 보라 ← 짙은 회색 → 순매수 청록
+  const FSTOPS = [
+    [-1, [167, 139, 250]], [-0.5, [124, 98, 196]], [-0.15, [80, 72, 118]], [0, [61, 66, 80]],
+    [0.15, [44, 96, 98]], [0.5, [28, 160, 148]], [1, [45, 212, 191]],
+  ];
+  function divColor(v, lim, stops) {
     if (v == null || isNaN(v)) return "rgb(70,74,84)";
     let t = Math.min(1, Math.abs(v) / lim);
     t = Math.abs(v) < lim * 0.02 ? 0 : Math.sign(v) * Math.sqrt(t);
-    let i = 0; while (i < STOPS.length - 2 && t > STOPS[i + 1][0]) i++;
-    const [p0, c0] = STOPS[i], [p1, c1] = STOPS[i + 1], f = Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
+    const ST = stops || (M.color === "smart" ? FSTOPS : STOPS);
+    let i = 0; while (i < ST.length - 2 && t > ST[i + 1][0]) i++;
+    const [p0, c0] = ST[i], [p1, c1] = ST[i + 1], f = Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
     return `rgb(${c0.map((a, k) => Math.round(a + (c1[k] - a) * f))})`;
   }
   // 화면에 그려지는 종목들의 |값| 92분위를 한계값으로: 조용한 날도 색 차이가 보이게
@@ -41,7 +47,7 @@
     tip.innerHTML = `<b>${esc(r.name)}</b> <span class="mut">${r.code} · ${esc(r.sector_name || "–")}</span>
       <div>등락(${M.period}일) <b class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</b></div>
       <div>거래량 배수 <b>${r[p.vr] == null ? "–" : r[p.vr].toFixed(1) + "x"}</b></div>
-      <div>${p.flow} 순매수 <b class="${fmt.cls(r[p.smart])}">${fmt.pct(r[p.smart], 2)}</b></div>
+      <div>${p.flow} 순매수 <b class="${flcls(r[p.smart])}">${fmt.pct(r[p.smart], 2)}</b></div>
       <div>${p.amtLabel} <b>${fmt.won(r[p.amt])}</b> · 시총 <b>${fmt.won(r.marcap)}</b></div>`;
     tip.style.display = "block";
     const W = innerWidth, x = e.clientX, y = e.clientY;
@@ -150,7 +156,7 @@
     // 이상 거래 상위 목록 (모바일에서 탭하기 쉽도록)
     const list = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, 15);
     $("#mapOutliers").innerHTML = list.length ? `<div class="cg-h">거래량 3배↑ 중 움직임이 큰 종목 (${list.length})</div>
-      <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</span><span class="mut">${r[p.vr].toFixed(1)}x</span><span class="${fmt.cls(r[p.smart])} small">수급 ${fmt.pct(r[p.smart], 2)}</span></button>`).join("")}</div>`
+      <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</span><span class="mut">${r[p.vr].toFixed(1)}x</span><span class="${flcls(r[p.smart])} small">수급 ${fmt.pct(r[p.smart], 2)}</span></button>`).join("")}</div>`
       : `<div class="mut small">이 기간에 거래량 3배 이상 종목이 없습니다</div>`;
     $("#mapOutliers").querySelectorAll("button").forEach(b => b.onclick = () => openDetail(b.dataset.code));
     $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, cLim, M.color === "ret" ? 1 : 2)
@@ -269,7 +275,7 @@
         const sw = list.reduce((a, r) => a + r.marcap, 0), sv = list.reduce((a, r) => a + r.marcap * (val(r) || 0), 0) / (sw || 1);
         secs = [[ZOOM, list, sw]];
         html += `<g class="t-back" data-back="1"><rect x="0" y="0" width="${W}" height="${BAR - 2}" class="t-barbg"/>
-          <text x="10" y="19" class="t-bar">◀ ${esc(ZOOM)} <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%</tspan> <tspan class="t-barsub">· ${list.length}종목 · 누르면 전체 업종으로</tspan></text></g>`;
+          <text x="10" y="19" class="t-bar">◀ ${esc(ZOOM)} <tspan class="${M.color === "smart" ? (sv >= 0 ? "t-fu" : "t-fd") : (sv >= 0 ? "t-up" : "t-dn")}">${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%</tspan> <tspan class="t-barsub">· ${list.length}종목 · 누르면 전체 업종으로</tspan></text></g>`;
       }
     }
     const outer = squarify(secs.map(s => s[2]), 0, BAR, W, H - BAR);
@@ -283,7 +289,7 @@
         const pctTxt = `${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%`;
         const full = name.length * 11 + pctTxt.length * 7 + 14 < o.w;
         const nm = fit(name, o.w - 10 - (full ? pctTxt.length * 7 + 4 : 0), 11);
-        html += `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${hdr + 1}" class="t-hdr" data-sec="${esc(name)}"><title>${esc(name)} 확대</title></rect><text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${pctTxt}</tspan>` : ""}</text>`;
+        html += `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${hdr + 1}" class="t-hdr" data-sec="${esc(name)}"><title>${esc(name)} 확대</title></rect><text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${M.color === "smart" ? (sv >= 0 ? "t-fu" : "t-fd") : (sv >= 0 ? "t-up" : "t-dn")}">${pctTxt}</tspan>` : ""}</text>`;
       }
       list.forEach((r, k) => {
         const q = inner[k]; idx.push(r);

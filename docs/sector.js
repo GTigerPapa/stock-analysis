@@ -100,7 +100,7 @@
         ${[["1일", row.ret_1d], ["5일", row.ret_5], ["20일", row.ret_20], ["60일", row.ret_60], ["120일", row.ret_120]].map(([l, v]) => `<div><span class="k">${l}</span><span class="v ${fmt.cls(v)}">${fmt.pct(v)}</span></div>`).join("")}
         <div><span class="k">RS 60 / 120</span><span class="v">${fmt.n(row.rs_60)} / ${fmt.n(row.rs_120)}</span></div>
         <div><span class="k">200일선 위 종목</span><span class="v">${fmt.n(row.breadth_ma200)}%</span></div>
-        <div><span class="k">외+기 60일 중앙값</span><span class="v ${fmt.cls(row.frgn_60_pct)}">${fmt.pct(row.frgn_60_pct, 2)}</span></div>
+        <div><span class="k">외+기 60일 중앙값</span><span class="v ${flcls(row.frgn_60_pct)}">${fmt.pct(row.frgn_60_pct, 2)}</span></div>
       </div>
       <div class="sec"><h4>기간별 변동률 추이 <span class="mut">업종 동일가중 지수 · 선 = 그날 기준 N거래일 전 대비</span></h4>
         <div class="chart mid2" id="secDChart"></div>
@@ -133,7 +133,7 @@
     $("#secList").innerHTML = `<table class="fin sec-tbl"><thead><tr><th>#</th><th>종목</th><th>${listN}일</th><th>종가</th><th>외+기 20일</th><th>거래대금20</th><th>시총</th></tr></thead><tbody>
       ${rows.map((r, i) => `<tr data-code="${r.code}"><td class="mut">${i + 1}</td><td class="nm">${esc(r.name)}${holds.has(r.code) ? ` <span class="badge st-good">보유</span>` : ""}<small>${r.code} · ${r.market}</small></td>
         <td class="${fmt.cls(r[key])}"><b>${fmt.pct(r[key])}</b></td><td>${fmt.n(r.close)}</td>
-        <td class="${fmt.cls(r.smart_net_20_pct)}">${fmt.pct(r.smart_net_20_pct, 2)}</td><td>${fmt.won(r.amount_avg20)}</td><td>${fmt.won(r.marcap)}</td></tr>`).join("")}</tbody></table>`;
+        <td class="${flcls(r.smart_net_20_pct)}">${fmt.pct(r.smart_net_20_pct, 2)}</td><td>${fmt.won(r.amount_avg20)}</td><td>${fmt.won(r.marcap)}</td></tr>`).join("")}</tbody></table>`;
     $("#secList").querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => window.openDetail(tr.dataset.code, { back: name }));
   }
 

@@ -14,6 +14,7 @@ const fmt = {
   },
   cls: (v) => v == null ? "mut" : v > 0 ? "up" : v < 0 ? "down" : "",
 };
+const flcls = v => v == null ? "mut" : v > 0 ? "fl-up" : v < 0 ? "fl-dn" : ""; // 수급 방향 색 (가격 색과 분리)
 const td = (html, cls = "") => `<td class="${cls}">${html}</td>`;
 const pctTd = (v, d = 1) => td(fmt.pct(v, d), fmt.cls(v));
 
@@ -30,8 +31,8 @@ const COLS = {
   r2_120: { h: "R²", f: r => r.r2_120 == null ? "–" : r.r2_120.toFixed(2), tip: "추세의 매끄러움(1에 가까울수록 직선적)" },
   dd_52w: { h: "52주낙폭", f: r => fmt.pct(r.dd_52w), c: r => fmt.cls(r.dd_52w) },
   close_vs_ma200: { h: "vs200일선", f: r => fmt.pct(r.close_vs_ma200), c: r => fmt.cls(r.close_vs_ma200) },
-  smart_net_60_pct: { h: "외+기60", f: r => fmt.pct(r.smart_net_60_pct, 2), c: r => fmt.cls(r.smart_net_60_pct), tip: "외국인+기관 60일 순매수 / 발행주식수" },
-  frgn_net_60_pct: { h: "외인60", f: r => fmt.pct(r.frgn_net_60_pct, 2), c: r => fmt.cls(r.frgn_net_60_pct) },
+  smart_net_60_pct: { h: "외+기60", f: r => fmt.pct(r.smart_net_60_pct, 2), c: r => flcls(r.smart_net_60_pct), tip: "외국인+기관 60일 순매수 / 발행주식수" },
+  frgn_net_60_pct: { h: "외인60", f: r => fmt.pct(r.frgn_net_60_pct, 2), c: r => flcls(r.frgn_net_60_pct) },
   excess_60: { h: "섹터대비60", f: r => fmt.pct(r.excess_60), c: r => fmt.cls(r.excess_60), tip: "종목 60일 수익률 − 업종 중앙값" },
   sector_rs_60: { h: "업종RS", f: r => fmt.n(r.sector_rs_60), tip: "업종 60일 상대강도 백분위" },
   per: { h: "PER", f: r => fmt.n(r.per, 1) },
@@ -189,7 +190,7 @@ function renderSectors() {
   const maxAbs = Math.max(...rows.map(r => Math.abs(r.ret_60 || 0)), 1);
   const bar = (v) => `<div class="bar"><i style="width:${Math.abs(v || 0) / maxAbs * 100}%"></i><span class="${fmt.cls(v)}">${fmt.pct(v)}</span></div>`;
   $("#sectorTable").innerHTML = `<thead><tr><th>업종</th><th>종목수</th><th>1일</th><th>5일</th><th>20일</th><th>60일</th><th>120일</th><th>RS60</th><th>RS120</th><th>200일선 위</th><th>외+기60 중앙값</th><th>거래대금20</th></tr></thead>
-  <tbody>${rows.map(r => `<tr data-sec="${r.sector_name}"><td class="name">${r.sector_name}</td><td>${r.n}</td>${pctTd(r.ret_1d)}${pctTd(r.ret_5)}${pctTd(r.ret_20)}<td>${bar(r.ret_60)}</td>${pctTd(r.ret_120)}<td>${fmt.n(r.rs_60)}</td><td>${fmt.n(r.rs_120)}</td><td>${fmt.n(r.breadth_ma200)}%</td>${pctTd(r.frgn_60_pct, 2)}<td>${fmt.won(r.amount_avg20)}</td></tr>`).join("")}</tbody>`;
+  <tbody>${rows.map(r => `<tr data-sec="${r.sector_name}"><td class="name">${r.sector_name}</td><td>${r.n}</td>${pctTd(r.ret_1d)}${pctTd(r.ret_5)}${pctTd(r.ret_20)}<td>${bar(r.ret_60)}</td>${pctTd(r.ret_120)}<td>${fmt.n(r.rs_60)}</td><td>${fmt.n(r.rs_120)}</td><td>${fmt.n(r.breadth_ma200)}%</td><td class="${flcls(r.frgn_60_pct)}">${fmt.pct(r.frgn_60_pct, 2)}</td><td>${fmt.won(r.amount_avg20)}</td></tr>`).join("")}</tbody>`;
   $("#sectorTable").querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => {
     window.openSector ? window.openSector(tr.dataset.sec) : (($("#secSel").value = tr.dataset.sec), switchTab("all"), renderAll());
   });
@@ -248,7 +249,7 @@ async function openDetail(code) {
 }
 function featureGrid(f) {
   return GROUPS.map(([g, items]) => `<div class="sec"><h4>${g}</h4><div class="fgrid">${items.map(it => {
-    const v = f[it.k]; return `<div><div class="k">${it.label}</div><div class="v ${/pct|ret|slope|excess|gap|qoq|yoy|dd_|upside|net/.test(it.k) ? fmt.cls(v) : ""}">${v == null ? "–" : it.fn(v)}</div></div>`;
+    const v = f[it.k]; return `<div><div class="k">${it.label}</div><div class="v ${/net|foreign_ratio_chg/.test(it.k) ? flcls(v) : /pct|ret|slope|excess|gap|qoq|yoy|dd_|upside/.test(it.k) ? fmt.cls(v) : ""}">${v == null ? "–" : it.fn(v)}</div></div>`;
   }).join("")}</div></div>`).join("");
 }
 function finTable(rows) {
