@@ -160,10 +160,10 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-
 .m-grid { stroke: var(--line); stroke-width: 1; }
 .m-one { stroke-dasharray: 4 3; stroke: #b9b9b4; }
 .m-zero { stroke: #b9b9b4; }
-.m-zone { fill: color-mix(in srgb, #d08a00 9%, transparent); }
+.m-zone { fill: color-mix(in srgb, var(--text) 5%, transparent); }
 .m-tick { font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 .m-axis { font-size: 11.5px; fill: var(--muted); }
-.m-zlabel { font-size: 11px; fill: #9a6a1a; }
+.m-zlabel { font-size: 11px; fill: var(--muted); font-weight: 600; }
 .m-qlabel { font-size: 11px; fill: var(--muted); }
 .m-dots circle { stroke: var(--panel); stroke-width: .7; opacity: .85; cursor: pointer; }
 .m-dots circle:hover { stroke: var(--text); stroke-width: 1.5; opacity: 1; }
@@ -286,8 +286,12 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 
 /* 수급 색 체계: 가격 등락(빨강/파랑)과 분리
    투자자 구분 = 외국인 청록 · 기관 앰버 / 합산 수급 방향 = 순매수 청록 · 순매도 보라 */
-:root { --frgn: #0f9f8f; --inst: #c97a06; --flow-up: #0f9f8f; --flow-dn: #7c5cd6; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --frgn: #2dd4bf; --inst: #fbbf24; --flow-up: #2dd4bf; --flow-dn: #a78bfa; } }
+:root { --frgn: #0f9f8f; --inst: #c97a06; --flow-up: #0f9f8f; --flow-dn: #c97a06; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --frgn: #2dd4bf; --inst: #fbbf24; --flow-up: #2dd4bf; --flow-dn: #fbbf24; } }
 .fl-up { color: var(--flow-up); } .fl-dn { color: var(--flow-dn); }
 .c-frgn { color: var(--frgn); font-weight: 700; } .c-inst { color: var(--inst); font-weight: 700; }
-.t-sec .t-fu, .t-bar .t-fu { fill: #5eead4; } .t-sec .t-fd, .t-bar .t-fd { fill: #c4b5fd; }
+.t-sec .t-fu, .t-bar .t-fu { fill: #5eead4; } .t-sec .t-fd, .t-bar .t-fd { fill: #fcd34d; }
+#secChart { position: relative; }
+.sec-tip { position: absolute; z-index: 5; display: none; pointer-events: none; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 9px; font-size: 12.5px; box-shadow: var(--shadow); white-space: nowrap; }
+.sec-tip .mut { font-size: 11px; margin-top: 2px; }

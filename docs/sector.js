@@ -62,6 +62,37 @@
     zero?.createPriceLine({ price: 0, color: isDark() ? "#5b636c" : "#b9b9b4", lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
     const n = dates.length;
     chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 250), to: n - 1 });
+
+    // 선 위 마우스 → 가장 가까운 업종 툴팁 + 강조, 클릭 → 업종 drawer
+    let tip = box.querySelector(".sec-tip");
+    if (!tip) { tip = document.createElement("div"); tip.className = "sec-tip"; box.appendChild(tip); }
+    let hoverName = null;
+    const nearest = param => {
+      if (!param || !param.time || !param.point) return null;
+      let best = null, bd = 14; // 14px 안쪽만 인정
+      for (const [name, s] of Object.entries(lines)) {
+        const dpt = param.seriesData.get(s);
+        if (!dpt || dpt.value == null) continue;
+        const y = s.priceToCoordinate(dpt.value);
+        if (y == null) continue;
+        const dist = Math.abs(y - param.point.y);
+        if (dist < bd) { bd = dist; best = { name, value: dpt.value, y }; }
+      }
+      return best;
+    };
+    chart.subscribeCrosshairMove(param => {
+      const hit = nearest(param);
+      if (!hit) { tip.style.display = "none"; box.style.cursor = ""; if (hoverName) { hoverName = null; highlight(null); } return; }
+      if (hit.name !== hoverName) { hoverName = hit.name; highlight(hit.name); }
+      box.style.cursor = "pointer";
+      tip.innerHTML = `<b>${esc(hit.name)}</b> <span class="${fmt.cls(hit.value)}">${fmt.pct(hit.value)}</span><div class="mut">${param.time} · ${N}일 변동률 · 누르면 업종 상세</div>`;
+      tip.style.display = "block";
+      const W = box.clientWidth;
+      tip.style.left = Math.min(W - tip.offsetWidth - 70, param.point.x + 14) + "px";
+      tip.style.top = Math.max(4, hit.y - tip.offsetHeight - 10) + "px";
+    });
+    chart.subscribeClick(param => { const hit = nearest(param); if (hit) { tip.style.display = "none"; window.openSector(hit.name); } });
+    box.onmouseleave = () => { tip.style.display = "none"; if (hoverName) { hoverName = null; highlight(null); } };
     // 순위 목록
     $("#secRank").innerHTML = `<div class="sr-h">${N}일 변동률 순위 <span class="mut">${data.length}개 업종</span></div>` +
       data.map((x, i) => `<div class="sr-row" data-sec="${esc(x.name)}"><span class="sr-i">${i + 1}</span>
@@ -72,7 +103,7 @@
       r.onmouseleave = () => highlight(null);
       r.onclick = () => window.openSector(r.dataset.sec);
     });
-    $("#secLegend").innerHTML = `<span>선 = 업종 동일가중 지수의 ${N}일 변동률 (그날 기준 ${N}거래일 전 대비)</span><span>색 = 최근 상위 5 / 하위 5, 나머지 회색</span><span class="mut">오른쪽 목록에 마우스를 올리면 강조, 누르면 업종 상세 · 3종목 미만 업종 ${small.length}개 제외(아래 표에서 열기)</span>`;
+    $("#secLegend").innerHTML = `<span>선 = 업종 동일가중 지수의 ${N}일 변동률 (그날 기준 ${N}거래일 전 대비)</span><span>색 = 최근 상위 5 / 하위 5, 나머지 회색</span><span class="mut">선이나 오른쪽 목록에 마우스를 올리면 강조, 누르면 업종 상세 · 3종목 미만 업종 ${small.length}개 제외(아래 표에서 열기)</span>`;
   }
   function highlight(name) {
     Object.entries(lines).forEach(([k, s]) => {
