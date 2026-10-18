@@ -248,3 +248,14 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 .t-bar { font-size: 14px; font-weight: 700; fill: #f0f2f4; }
 .t-bar .t-up { fill: #f19a8f; } .t-bar .t-dn { fill: #8fb3f5; }
 .t-barsub { font-size: 11.5px; font-weight: 400; fill: #9aa3ad; }
+
+/* 산점도 확대·이동 */
+#mapScatter { position: relative; }
+.m-svg { touch-action: pan-y; cursor: grab; user-select: none; }
+.m-svg.zoomed { touch-action: none; }
+.m-svg:active { cursor: grabbing; }
+.m-zoom { position: absolute; top: 8px; right: 14px; display: flex; gap: 4px; }
+.m-zoom button { width: 30px; height: 28px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px; cursor: pointer; font-size: 15px; line-height: 1; }
+.m-zoom button:hover:not(:disabled) { border-color: var(--accent); }
+.m-zoom button:disabled { opacity: .35; cursor: default; }
+.m-zhint { position: absolute; top: 40px; right: 14px; font-size: 10.5px; color: var(--muted); pointer-events: none; }

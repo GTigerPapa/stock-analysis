@@ -70,13 +70,19 @@
     let rows = state.universe.filter(r => r[p.vr] > 0 && r[p.ret] != null && (!M.liquid || (r.amount_avg20 || 0) >= 1e9));
     const W = Math.max(320, el.clientWidth), H = Math.round(Math.max(360, Math.min(620, W * 0.62)));
     const m = { l: 44, r: 12, t: 14, b: 44 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
-    const x0 = Math.log(0.15), x1 = Math.log(40);
     const abs = rows.map(r => Math.abs(r[p.ret])).sort((a, b) => a - b);
     const raw = Math.max(p.lim, abs[Math.floor(abs.length * 0.995)] || p.lim);
-    const step = raw <= 20 ? 5 : raw <= 40 ? 10 : raw <= 100 ? 20 : 50;
-    const yl = Math.ceil(raw / step) * step;
-    const X = v => m.l + (Math.log(Math.max(0.15, Math.min(40, v))) - x0) / (x1 - x0) * iw;
-    const Y = v => m.t + (1 - (Math.max(-yl, Math.min(yl, v)) + yl) / (2 * yl)) * ih;
+    const step0 = raw <= 20 ? 5 : raw <= 40 ? 10 : raw <= 100 ? 20 : 50;
+    const yl = Math.ceil(raw / step0) * step0;
+    const vkey = M.period + "|" + M.liquid;
+    if (VIEW && VIEW.key !== vkey) VIEW = null;
+    const BASE = { lx0: Math.log(0.15), lx1: Math.log(40), ya: -yl, yb: yl };
+    const D = VIEW || BASE, zoomed = !!VIEW;
+    const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+    const X = v => m.l + ((zoomed ? Math.log(Math.max(1e-4, v)) : cl(Math.log(Math.max(1e-4, v)), BASE.lx0, BASE.lx1)) - D.lx0) / (D.lx1 - D.lx0) * iw;
+    const Y = v => m.t + (1 - ((zoomed ? v : cl(v, -yl, yl)) - D.ya) / (D.yb - D.ya)) * ih;
+    CUR = { m, iw, ih, D, BASE };
+    const inView = r => { const x = X(r[p.vr]), y = Y(r[p.ret]); return x >= m.l - 20 && x <= m.l + iw + 20 && y >= m.t - 20 && y <= m.t + ih + 20; };
     // 버블 면적 ∝ 거래대금 (반지름 = 제곱근), 상한으로 대형주가 화면을 덮지 않게
     const R = r => Math.max(1.8, Math.min(W < 600 ? 11 : 18, Math.sqrt((r[p.amt] || 0) / 1e8) * (W < 600 ? 0.35 : 0.5)));
     const cKey = M.color === "ret" ? p.ret : p.smart;
@@ -84,10 +90,16 @@
     const col = r => divColor(r[cKey], cLim);
     rows = rows.slice().sort((a, b) => (b[p.amt] || 0) - (a[p.amt] || 0)); // 큰 점 먼저 → 작은 점이 위
     const score = r => Math.log(Math.max(1, r[p.vr])) * Math.abs(r[p.ret]);
-    const top = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, W < 600 ? 6 : 12);
+    const vis = zoomed ? rows.filter(inView) : rows;
+    const top = (zoomed ? vis : vis.filter(r => r[p.vr] >= 3)).slice().sort((a, b) => score(b) - score(a)).slice(0, W < 600 ? 6 : (zoomed ? 18 : 12));
     const topSet = new Set(top.map(r => r.code));
-    const xt = [0.2, 0.5, 1, 2, 3, 5, 10, 20];
-    const yt = []; for (let v = -yl; v <= yl + 1e-9; v += step) yt.push(v);
+    const XC = [0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 15, 20, 30, 50, 100, 200, 500];
+    let xt = XC.filter(v => Math.log(v) >= D.lx0 && Math.log(v) <= D.lx1);
+    while (xt.length > 11) xt = xt.filter((_, i) => i % 2 === 0 || xt[i] === 1 || xt[i] === 3);
+    const span = D.yb - D.ya, rawStep = span / 6, mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(v => v >= rawStep);
+    const yt = []; for (let v = Math.ceil(D.ya / step) * step; v <= D.yb + 1e-9; v += step) yt.push(+v.toFixed(6));
+    const fmtY = v => (v > 0 ? "+" : "") + (step < 1 ? v.toFixed(step < 0.1 ? 2 : 1) : Math.round(v)) + "%";
     // 라벨 배치: 겹치면 아래로 밀고, 그래도 겹치면 생략
     const placed = [
       { x: X(3) + 4, y: m.t + 4, w: 104, h: 16 }, { x: X(3) + 4, y: m.t + ih - 20, w: 104, h: 16 }, { x: m.l + 4, y: m.t + 4, w: 70, h: 16 },
@@ -104,27 +116,36 @@
       }
       return "";
     };
-    const holdRows = rows.filter(r => holds.has(r.code));
+    const holdRows = vis.filter(r => holds.has(r.code));
     let labels = holdRows.map(r => `<circle cx="${X(r[p.vr])}" cy="${Y(r[p.ret])}" r="${R(r) + 5}" class="m-hold"/>`).join("");
     labels += holdRows.map(r => place(r, "m-hlabel", 12, true)).join("");
     labels += top.filter(r => !holds.has(r.code)).map(r => place(r, "m-label", 10.5, false)).join("");
-    let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="거래량 배수와 등락률 산점도">
-      <rect x="${X(3)}" y="${m.t}" width="${X(40) - X(3)}" height="${ih}" class="m-zone"/>
+    const zx = Math.max(m.l, X(3)), zr = m.l + iw;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="거래량 배수와 등락률 산점도" class="m-svg${zoomed ? " zoomed" : ""}">
+      <defs><clipPath id="mclip"><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/></clipPath></defs>
+      ${zx < zr ? `<rect x="${zx}" y="${m.t}" width="${zr - zx}" height="${ih}" class="m-zone"/>` : ""}
       ${xt.map(v => `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${m.t + ih}" class="m-grid${v === 1 ? " m-one" : ""}"/><text x="${X(v)}" y="${H - 26}" class="m-tick" text-anchor="middle">${v}x</text>`).join("")}
-      ${yt.map(v => `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" class="m-grid${v === 0 ? " m-zero" : ""}"/><text x="${m.l - 6}" y="${Y(v) + 4}" class="m-tick" text-anchor="end">${v > 0 ? "+" : ""}${Math.round(v)}%</text>`).join("")}
+      ${yt.map(v => `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" class="m-grid${v === 0 ? " m-zero" : ""}"/><text x="${m.l - 6}" y="${Y(v) + 4}" class="m-tick" text-anchor="end">${fmtY(v)}</text>`).join("")}
       <text x="${m.l + iw / 2}" y="${H - 6}" class="m-axis" text-anchor="middle">${p.vrLabel} (로그 축)</text>
-      <text x="${X(3) + 6}" y="${m.t + 16}" class="m-zlabel">거래 폭발 + 상승</text>
-      <text x="${X(3) + 6}" y="${m.t + ih - 8}" class="m-zlabel">거래 폭발 + 하락</text>
-      <text x="${m.l + 6}" y="${m.t + 16}" class="m-qlabel">조용히 상승</text>
-      <g class="m-dots">${rows.map((r, i) => `<circle data-i="${i}" cx="${X(r[p.vr]).toFixed(1)}" cy="${Y(r[p.ret]).toFixed(1)}" r="${R(r).toFixed(1)}" fill="${col(r)}"/>`).join("")}</g>
-      ${labels}
-    </svg>`;
+      ${zx < zr - 110 ? `<text x="${zx + 6}" y="${m.t + 16}" class="m-zlabel">거래 폭발 + 상승</text>
+      <text x="${zx + 6}" y="${m.t + ih - 8}" class="m-zlabel">거래 폭발 + 하락</text>` : ""}
+      ${zoomed ? "" : `<text x="${m.l + 6}" y="${m.t + 16}" class="m-qlabel">조용히 상승</text>`}
+      <g class="m-dots" clip-path="url(#mclip)">${rows.map((r, i) => zoomed && !inView(r) ? "" : `<circle data-i="${i}" cx="${X(r[p.vr]).toFixed(1)}" cy="${Y(r[p.ret]).toFixed(1)}" r="${R(r).toFixed(1)}" fill="${col(r)}"/>`).join("")}</g>
+      <g clip-path="url(#mclip)">${labels}</g>
+    </svg>
+    <div class="m-zoom"><button data-z="in" title="확대">＋</button><button data-z="out" title="축소">−</button><button data-z="reset" title="원래대로" ${zoomed ? "" : "disabled"}>⟲</button></div>
+    <div class="m-zhint">${zoomed ? "드래그 = 이동 · 휠/핀치 = 확대·축소 · 더블클릭 = 원래대로" : "마우스 휠·핀치로 확대, 드래그로 이동"}</div>`;
     el.innerHTML = svg;
+    el.querySelectorAll(".m-zoom button").forEach(b => b.onclick = () => {
+      if (b.dataset.z === "reset") { VIEW = null; render1(); return; }
+      zoomAt(m.l + iw / 2, m.t + ih / 2, b.dataset.z === "in" ? 0.6 : 1 / 0.6);
+    });
+    bindZoom(el);
     el.querySelectorAll(".m-dots circle").forEach(c => {
       const r = rows[+c.dataset.i];
       c.addEventListener("mousemove", e => showTip(e, r));
       c.addEventListener("mouseleave", hideTip);
-      c.addEventListener("click", () => { hideTip(); openDetail(r.code); });
+      c.addEventListener("click", () => { if (el._dragged) return; hideTip(); openDetail(r.code); });
     });
     // 이상 거래 상위 목록 (모바일에서 탭하기 쉽도록)
     const list = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, 15);
@@ -134,6 +155,67 @@
     $("#mapOutliers").querySelectorAll("button").forEach(b => b.onclick = () => openDetail(b.dataset.code));
     $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, cLim, M.color === "ret" ? 1 : 2)
       + `<span>점 크기 = ${p.amtLabel}</span><span><i class="ring"></i>보유 종목</span>`;
+  }
+
+  // ---------- 산점도 확대·이동 ----------
+  let VIEW = null, CUR = null, raf = 0;
+  const render1 = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { scatter(); }); };
+  function setView(v) {
+    const B = CUR.BASE, minX = 0.08, minY = 0.4; // 최소 표시 폭
+    if (v.lx1 - v.lx0 < minX) { const c = (v.lx0 + v.lx1) / 2; v.lx0 = c - minX / 2; v.lx1 = c + minX / 2; }
+    if (v.yb - v.ya < minY) { const c = (v.ya + v.yb) / 2; v.ya = c - minY / 2; v.yb = c + minY / 2; }
+    const full = v.lx0 <= B.lx0 + 1e-6 && v.lx1 >= B.lx1 - 1e-6 && v.ya <= B.ya + 1e-6 && v.yb >= B.yb - 1e-6;
+    VIEW = full ? null : Object.assign(v, { key: M.period + "|" + M.liquid });
+    render1();
+  }
+  // 화면 좌표(px, py)를 중심으로 k배(0.6=확대) 범위 조정
+  function zoomAt(px, py, k) {
+    const { m, iw, ih, D } = CUR;
+    const fx = Math.max(0, Math.min(1, (px - m.l) / iw)), fy = Math.max(0, Math.min(1, (py - m.t) / ih));
+    const cx = D.lx0 + fx * (D.lx1 - D.lx0), cy = D.yb - fy * (D.yb - D.ya);
+    setView({ lx0: cx - (cx - D.lx0) * k, lx1: cx + (D.lx1 - cx) * k, yb: cy + (D.yb - cy) * k, ya: cy - (cy - D.ya) * k });
+  }
+  function svgPt(el, e) {
+    const svg = el.querySelector("svg"), r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    return [(e.clientX - r.left) * vb.width / r.width, (e.clientY - r.top) * vb.height / r.height];
+  }
+  function bindZoom(el) {
+    if (el._zoomBound) return; el._zoomBound = true;
+    const ptrs = new Map(); let start = null;
+    el.addEventListener("wheel", e => {
+      if (!e.target.closest("svg")) return;
+      e.preventDefault(); hideTip();
+      const [x, y] = svgPt(el, e);
+      zoomAt(x, y, Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * 0.0018))));
+    }, { passive: false });
+    el.addEventListener("dblclick", e => { if (e.target.closest("svg")) { VIEW = null; render1(); } });
+    el.addEventListener("pointerdown", e => {
+      if (!e.target.closest("svg")) return;
+      ptrs.set(e.pointerId, svgPt(el, e)); el._dragged = false;
+      start = { D: Object.assign({}, CUR.D), pts: new Map(ptrs) };
+      if (ptrs.size === 1) el.setPointerCapture?.(e.pointerId);
+    });
+    el.addEventListener("pointermove", e => {
+      if (!ptrs.has(e.pointerId) || !start) return;
+      ptrs.set(e.pointerId, svgPt(el, e));
+      const { iw, ih } = CUR, S = start.D;
+      if (ptrs.size === 1 && start.pts.size === 1) {
+        const [x0, y0] = [...start.pts.values()][0], [x1, y1] = ptrs.get(e.pointerId);
+        if (!el._dragged && Math.hypot(x1 - x0, y1 - y0) < 4) return;
+        el._dragged = true; hideTip();
+        const dx = (x1 - x0) / iw * (S.lx1 - S.lx0), dy = (y1 - y0) / ih * (S.yb - S.ya);
+        VIEW = { lx0: S.lx0 - dx, lx1: S.lx1 - dx, ya: S.ya + dy, yb: S.yb + dy, key: M.period + "|" + M.liquid };
+        render1();
+      } else if (ptrs.size === 2 && start.pts.size === 2) {
+        const [a0, b0] = [...start.pts.values()], [a1, b1] = [...ptrs.values()];
+        const d0 = Math.hypot(a0[0] - b0[0], a0[1] - b0[1]), d1 = Math.hypot(a1[0] - b1[0], a1[1] - b1[1]);
+        if (d0 < 10) return;
+        el._dragged = true;
+        CUR.D = S; zoomAt((a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2, d0 / d1);
+      }
+    });
+    const end = e => { ptrs.delete(e.pointerId); if (!ptrs.size) { start = null; setTimeout(() => { el._dragged = false; }, 0); } else start = { D: Object.assign({}, CUR.D), pts: new Map(ptrs) }; };
+    el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
   }
 
   function legend(title, lim, d) {
