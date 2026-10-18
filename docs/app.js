@@ -115,32 +115,71 @@ function verdict(f) {
   if (f.op_qoq != null) (f.op_qoq > 0 ? good : bad).push(`영업이익 QoQ ${fmt.pct(f.op_qoq, 0)}`);
   return `<div class="verdict"><b>긍정 ${good.length}</b> · ${good.join(", ") || "없음"}<br><b>부정 ${bad.length}</b> · ${bad.join(", ") || "없음"}</div>`;
 }
+// ---------- 보유 점검 ----------
+// 평단·수량은 이 브라우저에만 저장(공개 저장소에 올라가지 않음)
+const POS_KEY = "positions.v1";
+function loadPos() { try { return JSON.parse(localStorage.getItem(POS_KEY) || "{}"); } catch (e) { return {}; } }
+function savePos(p) { try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) { /* 저장 불가 환경 */ } }
+const ST = { good: { t: "양호", c: "st-good" }, warn: { t: "주의", c: "st-warn" }, bad: { t: "약세", c: "st-bad" } };
+function posBlock(w, f) {
+  const p = loadPos()[w.code] || {};
+  const avg = +p.avg || 0, qty = +p.qty || 0;
+  let res = `<div class="pos-hint">평단·수량을 입력하면 손익과 평단 회복까지 필요한 상승률을 보여줍니다. 이 기기 브라우저에만 저장됩니다.</div>`;
+  if (avg > 0 && f?.close) {
+    const r = (f.close / avg - 1) * 100, need = (avg / f.close - 1) * 100;
+    res = `<div class="pos-res">
+      <div><span class="k">수익률</span><span class="v ${fmt.cls(r)}">${fmt.pct(r)}</span></div>
+      ${qty > 0 ? `<div><span class="k">평가손익</span><span class="v ${fmt.cls(r)}">${fmt.won((f.close - avg) * qty)}</span></div>
+      <div><span class="k">평가금액</span><span class="v">${fmt.won(f.close * qty)}</span></div>` : ""}
+      ${r < 0 ? `<div><span class="k">평단 회복까지</span><span class="v">${fmt.pct(need)}</span></div>` : ""}
+      ${f.high52 ? `<div><span class="k">52주 고점 시 수익률</span><span class="v">${fmt.pct((f.high52 / avg - 1) * 100)}</span></div>` : ""}
+    </div>`;
+  }
+  return `<div class="pos" onclick="event.stopPropagation()">
+    <div class="pos-in"><label>평단 <input type="number" inputmode="decimal" data-k="avg" data-code="${w.code}" value="${avg || ""}" placeholder="원"></label>
+    <label>수량 <input type="number" inputmode="numeric" data-k="qty" data-code="${w.code}" value="${qty || ""}" placeholder="주"></label></div>${res}</div>`;
+}
+function checkTable(checks) {
+  const groups = [...new Set(checks.map(c => c.group))];
+  return groups.map(g => `<div class="cg"><div class="cg-h">${g}</div>${checks.filter(c => c.group === g).map(c => {
+    const st = ST[c.status] || { t: "–", c: "st-na" };
+    return `<div class="ck" title="${c.desc}"><span class="ck-l">${c.label}</span><span class="ck-v">${c.text}</span><span class="badge ${st.c}">${st.t}</span></div>`;
+  }).join("")}</div>`).join("");
+}
+function changeBlock(w) {
+  const today = w.changes_today || [], log = w.change_log || [];
+  const arrow = (a, b) => `<span class="badge ${ST[a].c}">${ST[a].t}</span>→<span class="badge ${ST[b].c}">${ST[b].t}</span>`;
+  const t = today.length ? `<div class="chg-today">${today.map(c => `<div class="${c.direction === "up" ? "up" : "down"}">${c.direction === "up" ? "▲" : "▼"} ${c.label} ${arrow(c.from, c.to)} <span class="mut">${c.text}</span></div>`).join("")}</div>`
+    : `<div class="mut small">오늘 상태가 바뀐 항목 없음</div>`;
+  const l = log.length ? `<details><summary>최근 20거래일 변화 ${log.length}건</summary>${log.map(c => `<div class="small">${c.date.slice(5)} · ${c.label} ${arrow(c.from, c.to)}</div>`).join("")}</details>`
+    : `<div class="mut small">변화 이력은 매일 실행되며 쌓입니다</div>`;
+  return `<div class="sec-mini"><div class="cg-h">신호 변화</div>${t}${l}</div>`;
+}
 async function renderWatch() {
   const ws = state.latest.watchlist || [];
   const el = $("#watchCards");
-  el.innerHTML = ws.map(w => `<div class="card" data-code="${w.code}" id="wc-${w.code}"><h3>${w.name}<small>${w.code}</small></h3><div class="sub">불러오는 중…</div></div>`).join("") || `<div class="empty">presets/watchlist.json 에 종목을 추가하세요</div>`;
+  el.innerHTML = ws.map(w => `<div class="card hold" id="wc-${w.code}"><h3>${w.name}<small>${w.code}</small></h3><div class="sub">불러오는 중…</div></div>`).join("") || `<div class="empty">presets/watchlist.json 에 종목을 추가하세요</div>`;
   for (const w of ws) {
     const f = w.features; const card = $("#wc-" + w.code);
     if (!f) { card.querySelector(".sub").textContent = "데이터 없음 (상장폐지·거래정지?)"; continue; }
     let d = null; try { d = await loadStock(w.code); } catch (e) { /* 상세 없음 */ }
+    const s = w.summary || {};
     card.innerHTML = `
       <h3>${w.name}<small>${w.code} · ${f.sector_name || ""}</small></h3>
-      <div class="price">${fmt.n(f.close)} <span class="${fmt.cls(f.ret_1d)}" style="font-size:14px">${fmt.pct(f.ret_1d)}</span></div>
-      <div class="sub">${w.note || ""} ${f.nxt_gap ? `· NXT ${fmt.pct(f.nxt_gap, 2)}` : ""}</div>
+      <div class="price">${fmt.n(f.close)} <span class="${fmt.cls(f.ret_1d)}" style="font-size:14px">${fmt.pct(f.ret_1d)}</span>
+        <span class="tally"><span class="badge st-good">양호 ${s.good || 0}</span><span class="badge st-warn">주의 ${s.warn || 0}</span><span class="badge st-bad">약세 ${s.bad || 0}</span></span></div>
+      <div class="sub">${w.note || ""} · 52주 고점 대비 ${fmt.pct(f.dd_52w)} · 1년 ${fmt.pct(f.ret_250)}${f.nxt_gap ? ` · NXT ${fmt.pct(f.nxt_gap, 2)}` : ""}</div>
       <div class="spark">${sparkline(d?.prices)}</div>
-      <div class="kv">
-        <div><span class="k">60일</span><span class="v ${fmt.cls(f.ret_60)}">${fmt.pct(f.ret_60)}</span></div>
-        <div><span class="k">120일</span><span class="v ${fmt.cls(f.ret_120)}">${fmt.pct(f.ret_120)}</span></div>
-        <div><span class="k">1년</span><span class="v ${fmt.cls(f.ret_250)}">${fmt.pct(f.ret_250)}</span></div>
-        <div><span class="k">52주 낙폭</span><span class="v ${fmt.cls(f.dd_52w)}">${fmt.pct(f.dd_52w)}</span></div>
-        <div><span class="k">외+기 60일</span><span class="v ${fmt.cls(f.smart_net_60_pct)}">${fmt.pct(f.smart_net_60_pct, 2)}</span></div>
-        <div><span class="k">외인 지분</span><span class="v">${fmt.n(f.foreign_ratio, 1)}% <small class="${fmt.cls(f.foreign_ratio_chg_60)}">${f.foreign_ratio_chg_60 != null ? (f.foreign_ratio_chg_60 > 0 ? "+" : "") + f.foreign_ratio_chg_60.toFixed(2) + "p" : ""}</small></span></div>
-        <div><span class="k">PER / PBR</span><span class="v">${fmt.n(f.per, 1)} / ${fmt.n(f.pbr, 2)}</span></div>
-        <div><span class="k">목표가 괴리</span><span class="v ${fmt.cls(f.target_upside)}">${fmt.pct(f.target_upside, 0)}</span></div>
-        <div><span class="k">업종 RS60</span><span class="v">${fmt.n(f.sector_rs_60)}</span></div>
-      </div>
-      ${verdict(f)}`;
-    card.onclick = () => openDetail(w.code);
+      ${posBlock(w, f)}
+      ${changeBlock(w)}
+      <div class="checks">${checkTable(w.checks || [])}</div>
+      <div class="more">상세 차트 보기 →</div>`;
+    card.querySelector(".more").onclick = () => openDetail(w.code);
+    card.querySelectorAll(".pos input").forEach(inp => inp.onchange = () => {
+      const all = loadPos(); const c = inp.dataset.code;
+      all[c] = Object.assign(all[c] || {}, { [inp.dataset.k]: inp.value });
+      savePos(all); renderWatch();
+    });
   }
 }
 
@@ -281,7 +320,7 @@ async function init() {
   const secs = [...new Set(state.universe.map(r => r.sector_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   $("#secSel").innerHTML += secs.map(s => `<option>${s}</option>`).join("");
   renderMarket(); renderPresets(); renderWatch(); renderSectors(); renderAll();
-  let t = "screen"; try { t = localStorage.getItem("tab") || t; } catch (e) { /* 무시 */ }
+  let t = "watch"; try { t = localStorage.getItem("tab") || t; } catch (e) { /* 무시 */ }
   switchTab(t);
 }
 init();

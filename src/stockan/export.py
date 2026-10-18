@@ -10,6 +10,7 @@ import pandas as pd
 
 from .config import DOCS_DATA, load_presets, load_watchlist
 from .db import read_df
+from .holdings import diff as holdings_diff, evaluate as holdings_eval
 from .indicators import sector_table
 from .screener import run_all
 
@@ -65,6 +66,37 @@ def _stock_detail(code: str, feat: dict) -> dict:
     }
 
 
+def _watch_with_checks(watch: list[dict], byc: dict, asof: str) -> list[dict]:
+    """관심(보유) 종목 점검표 + 상태 변화 이력(holdings_history.json, 날짜별 항목 상태)."""
+    hp = DOCS_DATA / "holdings_history.json"
+    hist = json.loads(hp.read_text(encoding="utf-8")) if hp.exists() else {}
+    prev_dates = sorted(d for d in hist if d < asof)
+    out = []
+    today_states = {}
+    for w in watch:
+        f = byc.get(w["code"])
+        ev = holdings_eval(f)
+        today_states[w["code"]] = {c["id"]: c["status"] for c in ev["checks"]}
+        prev = hist[prev_dates[-1]].get(w["code"]) if prev_dates else None
+        changes_today = holdings_diff(prev, ev)
+        # 최근 20거래일 변화 로그
+        log = []
+        seq = prev_dates[-20:] + [asof]
+        for a, b in zip(seq, seq[1:]):
+            pa = hist.get(a, {}).get(w["code"]) if a != asof else None
+            pb = today_states[w["code"]] if b == asof else hist.get(b, {}).get(w["code"])
+            if pa and pb:
+                for cid, st in pb.items():
+                    if pa.get(cid) and st and pa[cid] != st:
+                        lab = next((c["label"] for c in ev["checks"] if c["id"] == cid), cid)
+                        log.append({"date": b, "label": lab, "from": pa[cid], "to": st})
+        out.append(dict(w, features=f, checks=ev["checks"], summary=ev["summary"], groups=ev.get("groups", {}),
+                        changes_today=changes_today, change_log=log[::-1]))
+    hist[asof] = today_states
+    _dump("holdings_history.json", hist)
+    return out
+
+
 def export_all(df: pd.DataFrame) -> None:
     asof = str(df["date"].max())
     presets = load_presets()
@@ -100,7 +132,7 @@ def export_all(df: pd.DataFrame) -> None:
             }
             for p in presets
         ],
-        "watchlist": [dict(w, **{"features": byc.get(w["code"])}) for w in watch],
+        "watchlist": _watch_with_checks(watch, byc, asof),
         "sectors": _records(sector_table(df), None or list(sector_table(df).columns)),
     }
     _dump("latest.json", latest)
