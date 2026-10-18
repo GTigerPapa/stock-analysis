@@ -302,6 +302,7 @@ function switchTab(id) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === id));
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-" + id));
   try { localStorage.setItem("tab", id); } catch (e) { /* 무시 */ }
+  if (id === "map" && window.renderMap) window.renderMap();
 }
 async function init() {
   $("#tabs").onclick = e => { const b = e.target.closest("button"); if (b) switchTab(b.dataset.tab); };

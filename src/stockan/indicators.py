@@ -97,6 +97,13 @@ def stock_features(px: pd.DataFrame, shares: float | None) -> dict:
     # 거래량·거래대금
     f["vol_avg20"] = float(v.tail(20).mean())
     f["vol_ratio20"] = float(v.iloc[-1] / f["vol_avg20"]) if f["vol_avg20"] else np.nan
+    # 기간별 거래량 배수: 최근 5일 평균 ÷ 직전 60일 평균, 최근 20일 평균 ÷ 직전 120일 평균
+    if len(v) >= 65:
+        base = v.iloc[-65:-5].mean()
+        f["vr5"] = float(v.tail(5).mean() / base) if base else np.nan
+    if len(v) >= 140:
+        base = v.iloc[-140:-20].mean()
+        f["vr20"] = float(v.tail(20).mean() / base) if base else np.nan
     f["amount_avg20"] = float(px["amount"].tail(20).mean())
     f["amount_avg60"] = float(px["amount"].tail(60).mean())
     obv = (np.sign(c.diff()).fillna(0) * v).cumsum()

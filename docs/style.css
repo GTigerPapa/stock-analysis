@@ -146,3 +146,48 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-
 .ck-v { font-variant-numeric: tabular-nums; color: var(--muted); }
 .more { margin-top: 10px; font-size: 12.5px; color: var(--accent); cursor: pointer; text-align: right; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .st-warn { color: #e0a63a; } }
+
+/* 한눈에 보기 탭 */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: none; padding: 6px 11px; cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.seg button.on { background: var(--accent-weak); color: var(--text); font-weight: 600; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+.panel-h { font-weight: 650; font-size: 14px; margin: 0 2px 8px; }
+.panel-h .mut { font-weight: 400; font-size: 12px; }
+.mapbox { width: 100%; overflow: hidden; }
+.mapbox svg { display: block; max-width: 100%; height: auto; }
+.mapbox.tree { background: #24282c; border-radius: 8px; }
+.m-grid { stroke: var(--line); stroke-width: 1; }
+.m-one { stroke-dasharray: 4 3; stroke: #b9b9b4; }
+.m-zero { stroke: #b9b9b4; }
+.m-zone { fill: color-mix(in srgb, #d08a00 9%, transparent); }
+.m-tick { font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.m-axis { font-size: 11.5px; fill: var(--muted); }
+.m-zlabel { font-size: 11px; fill: #9a6a1a; }
+.m-qlabel { font-size: 11px; fill: var(--muted); }
+.m-dots circle { stroke: var(--panel); stroke-width: .7; opacity: .85; cursor: pointer; }
+.m-dots circle:hover { stroke: var(--text); stroke-width: 1.5; opacity: 1; }
+.m-hold { fill: none; stroke: var(--text); stroke-width: 1.8; pointer-events: none; }
+.m-hlabel { font-size: 12px; font-weight: 700; fill: var(--text); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.m-label { font-size: 10.5px; fill: var(--text); pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.m-legend { align-items: center; }
+.m-legend .lg { display: inline-flex; gap: 1px; }
+.m-legend .lg i { width: 18px; height: 8px; margin: 0; border-radius: 1px; }
+.m-legend i.ring { width: 10px; height: 10px; border: 1.8px solid var(--text); border-radius: 50%; background: none; }
+.m-tip { position: fixed; z-index: 60; display: none; pointer-events: none; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.55; box-shadow: var(--shadow); max-width: 280px; }
+.m-tip .mut { font-size: 11px; }
+.t-cell { stroke: #24282c; stroke-width: 1; cursor: pointer; }
+.t-cell:hover { stroke: #fff; stroke-width: 2; }
+.t-hold { stroke: #fff; stroke-width: 2.5; stroke-dasharray: 5 3; }
+.t-name { pointer-events: none; font-weight: 550; }
+.t-sec { font-size: 11.5px; font-weight: 700; fill: #e7e9ec; }
+.t-sec .t-up { fill: #f19a8f; } .t-sec .t-dn { fill: #8fb3f5; }
+#mapOutliers { margin-top: 8px; }
+.ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+.ol button { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; text-align: left; border: 1px solid var(--line); background: var(--bg);
+  border-radius: 8px; padding: 6px 9px; cursor: pointer; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ol button .small { grid-column: 1 / -1; font-size: 11px; }
+.ol button:hover { border-color: var(--accent); }
+#mapControls .chk input { flex: none; min-width: 0; width: auto; padding: 0; }
+#mapControls { gap: 10px; }
