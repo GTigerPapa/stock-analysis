@@ -25,6 +25,7 @@ UNIVERSE_COLS = [
     "per", "pbr", "div_yield", "target_upside", "op_qoq", "op_yoy", "rev_yoy", "op_margin_q",
     "excess_60", "excess_120", "sector_rs_60", "rank_in_sector_60", "sector_size", "nxt_close", "nxt_gap", "rsi14",
     "vr5", "vr20", "smart_net_5_pct", "ret_250_pct_rank", "amount", "amount_avg5",
+    "frgn_net_5_pct", "inst_net_5_pct", "frgn_net_20_pct", "inst_net_20_pct",
 ]
 PRESET_COLS = ["rank", "score"] + UNIVERSE_COLS
 

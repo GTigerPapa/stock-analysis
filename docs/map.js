@@ -2,13 +2,14 @@
    app.js 의 state / fmt / $ / openDetail 을 그대로 사용 */
 (function () {
   const P = {
-    "1": { amt: "amount", amtLabel: "당일 거래대금", ret: "ret_1d", vr: "vol_ratio20", smart: "smart_net_5_pct", vrLabel: "오늘 거래량 ÷ 20일 평균", lim: 10, flow: "외+기 5일" },
-    "5": { amt: "amount_avg5", amtLabel: "5일 평균 거래대금", ret: "ret_5", vr: "vr5", smart: "smart_net_5_pct", vrLabel: "최근 5일 평균 거래량 ÷ 직전 60일 평균", lim: 15, flow: "외+기 5일" },
-    "20": { amt: "amount_avg20", amtLabel: "20일 평균 거래대금", ret: "ret_20", vr: "vr20", smart: "smart_net_20_pct", vrLabel: "최근 20일 평균 거래량 ÷ 직전 120일 평균", lim: 25, flow: "외+기 20일" },
+    "1": { amt: "amount", amtLabel: "당일 거래대금", ret: "ret_1d", vr: "vol_ratio20", smart: "smart_net_5_pct", vrLabel: "오늘 거래량 ÷ 20일 평균", lim: 10, flow: "외+기 5일", fr: "frgn_net_5_pct", in: "inst_net_5_pct", fd: "5일" },
+    "5": { amt: "amount_avg5", amtLabel: "5일 평균 거래대금", ret: "ret_5", vr: "vr5", smart: "smart_net_5_pct", vrLabel: "최근 5일 평균 거래량 ÷ 직전 60일 평균", lim: 15, flow: "외+기 5일", fr: "frgn_net_5_pct", in: "inst_net_5_pct", fd: "5일" },
+    "20": { amt: "amount_avg20", amtLabel: "20일 평균 거래대금", ret: "ret_20", vr: "vr20", smart: "smart_net_20_pct", vrLabel: "최근 20일 평균 거래량 ÷ 직전 120일 평균", lim: 25, flow: "외+기 20일", fr: "frgn_net_20_pct", in: "inst_net_20_pct", fd: "20일" },
   };
-  const M = { period: "1", color: "smart", liquid: true };
+  const M = { period: "1", color: "dom", liquid: true };
   let ZOOM = null; // 시장 지도 확대 중인 업종
   try { Object.assign(M, JSON.parse(localStorage.getItem("map.v2") || "{}")); } catch (e) { /* 무시 */ }
+  if (M.color !== "ret") M.color = "dom"; // 예전 저장값(smart) → 외국인 vs 기관 우위
   const saveM = () => { try { localStorage.setItem("map.v2", JSON.stringify(M)); } catch (e) { /* 무시 */ } };
 
   // 발산형 색: 파랑 ← 회색 → 빨강 (국내 관행: 상승 빨강)
@@ -17,7 +18,7 @@
     [-1, [31, 95, 232]], [-0.5, [47, 85, 168]], [-0.15, [54, 69, 110]], [0, [61, 66, 80]],
     [0.15, [106, 60, 70]], [0.5, [178, 58, 64]], [1, [242, 51, 58]],
   ];
-  // 수급(외+기) 모드: 순매도 앰버 ← 짙은 회색 → 순매수 청록 (종목 상세 수급 차트와 같은 두 색)
+  // 수급 모드: 기관 우위 노랑(앰버) ← 짙은 회색 → 외국인 우위 청록 (종목 상세 수급 차트의 외국인·기관 색과 같음)
   const FSTOPS = [
     [-1, [251, 191, 36]], [-0.5, [196, 146, 30]], [-0.15, [108, 92, 54]], [0, [61, 66, 80]],
     [0.15, [44, 96, 98]], [0.5, [28, 160, 148]], [1, [45, 212, 191]],
@@ -26,7 +27,7 @@
     if (v == null || isNaN(v)) return "rgb(70,74,84)";
     let t = Math.min(1, Math.abs(v) / lim);
     t = Math.abs(v) < lim * 0.02 ? 0 : Math.sign(v) * Math.sqrt(t);
-    const ST = stops || (M.color === "smart" ? FSTOPS : STOPS);
+    const ST = stops || (M.color === "dom" ? FSTOPS : STOPS);
     let i = 0; while (i < ST.length - 2 && t > ST[i + 1][0]) i++;
     const [p0, c0] = ST[i], [p1, c1] = ST[i + 1], f = Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
     return `rgb(${c0.map((a, k) => Math.round(a + (c1[k] - a) * f))})`;
@@ -37,6 +38,9 @@
     if (!a.length) return floor;
     return Math.max(floor, a[Math.floor(a.length * 0.92)]);
   }
+  // 외국인 − 기관 순매수 차이(발행주식 대비 %p): + = 외국인이 더 샀음, − = 기관이 더 샀음
+  const domVal = (r, p) => r[p.fr] == null || r[p.in] == null ? null : r[p.fr] - r[p.in];
+  const bothSell = (r, p) => r[p.fr] < 0 && r[p.in] < 0;
   const textOn = () => "#fff";
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -47,7 +51,7 @@
     tip.innerHTML = `<b>${esc(r.name)}</b> <span class="mut">${r.code} · ${esc(r.sector_name || "–")}</span>
       <div>등락(${M.period}일) <b class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</b></div>
       <div>거래량 배수 <b>${r[p.vr] == null ? "–" : r[p.vr].toFixed(1) + "x"}</b></div>
-      <div>${p.flow} 순매수 <b class="${flcls(r[p.smart])}">${fmt.pct(r[p.smart], 2)}</b></div>
+      <div>${p.fd} 순매수 <span class="c-frgn">외국인</span> <b>${fmt.pct(r[p.fr], 2)}</b> · <span class="c-inst">기관</span> <b>${fmt.pct(r[p.in], 2)}</b></div>
       <div>${p.amtLabel} <b>${fmt.won(r[p.amt])}</b> · 시총 <b>${fmt.won(r.marcap)}</b></div>`;
     tip.style.display = "block";
     const W = innerWidth, x = e.clientX, y = e.clientY;
@@ -61,7 +65,7 @@
     const seg = (key, opts) => `<div class="seg" data-key="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(M[key]) === v ? "on" : ""}">${l}</button>`).join("")}</div>`;
     $("#mapControls").innerHTML = `
       ${seg("period", [["1", "1일"], ["5", "5일"], ["20", "20일"]])}
-      ${seg("color", [["ret", "색: 등락"], ["smart", "색: 외+기 수급"]])}
+      ${seg("color", [["ret", "색: 등락"], ["dom", "색: 외국인 vs 기관"]])}
       <label class="chk"><input type="checkbox" id="mapLiquid" ${M.liquid ? "checked" : ""}> 거래대금 10억↑</label>`;
     $("#mapControls").querySelectorAll(".seg button").forEach(b => b.onclick = () => {
       M[b.parentElement.dataset.key] = b.dataset.v; saveM(); render();
@@ -91,9 +95,10 @@
     const inView = r => { const x = X(r[p.vr]), y = Y(r[p.ret]); return x >= m.l - 20 && x <= m.l + iw + 20 && y >= m.t - 20 && y <= m.t + ih + 20; };
     // 버블 면적 ∝ 거래대금 (반지름 = 제곱근), 상한으로 대형주가 화면을 덮지 않게
     const R = r => Math.max(1.8, Math.min(W < 600 ? 11 : 18, Math.sqrt((r[p.amt] || 0) / 1e8) * (W < 600 ? 0.35 : 0.5)));
-    const cKey = M.color === "ret" ? p.ret : p.smart;
-    const cLim = autoLim(rows.map(r => r[cKey]), M.color === "ret" ? 1 : 0.05);
-    const col = r => divColor(r[cKey], cLim);
+    const cv = r => M.color === "ret" ? r[p.ret] : domVal(r, p);
+    const cLim = autoLim(rows.map(cv), M.color === "ret" ? 1 : 0.05);
+    const col = r => divColor(cv(r), cLim);
+    const op = r => M.color === "dom" && bothSell(r, p) ? ` fill-opacity="0.3"` : "";
     rows = rows.slice().sort((a, b) => (b[p.amt] || 0) - (a[p.amt] || 0)); // 큰 점 먼저 → 작은 점이 위
     const score = r => Math.log(Math.max(1, r[p.vr])) * Math.abs(r[p.ret]);
     const vis = zoomed ? rows.filter(inView) : rows;
@@ -136,7 +141,7 @@
       ${zx < zr - 110 ? `<text x="${zx + 6}" y="${m.t + 16}" class="m-zlabel">거래 폭발 + 상승</text>
       <text x="${zx + 6}" y="${m.t + ih - 8}" class="m-zlabel">거래 폭발 + 하락</text>` : ""}
       ${zoomed ? "" : `<text x="${m.l + 6}" y="${m.t + 16}" class="m-qlabel">조용히 상승</text>`}
-      <g class="m-dots" clip-path="url(#mclip)">${rows.map((r, i) => zoomed && !inView(r) ? "" : `<circle data-i="${i}" cx="${X(r[p.vr]).toFixed(1)}" cy="${Y(r[p.ret]).toFixed(1)}" r="${R(r).toFixed(1)}" fill="${col(r)}"/>`).join("")}</g>
+      <g class="m-dots" clip-path="url(#mclip)">${rows.map((r, i) => zoomed && !inView(r) ? "" : `<circle data-i="${i}" cx="${X(r[p.vr]).toFixed(1)}" cy="${Y(r[p.ret]).toFixed(1)}" r="${R(r).toFixed(1)}" fill="${col(r)}"${op(r)}/>`).join("")}</g>
       <g clip-path="url(#mclip)">${labels}</g>
     </svg>
     <div class="m-zoom"><button data-z="in" title="확대">＋</button><button data-z="out" title="축소">−</button><button data-z="reset" title="원래대로" ${zoomed ? "" : "disabled"}>⟲</button></div>
@@ -156,10 +161,10 @@
     // 이상 거래 상위 목록 (모바일에서 탭하기 쉽도록)
     const list = rows.filter(r => r[p.vr] >= 3).sort((a, b) => score(b) - score(a)).slice(0, 15);
     $("#mapOutliers").innerHTML = list.length ? `<div class="cg-h">거래량 3배↑ 중 움직임이 큰 종목 (${list.length})</div>
-      <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</span><span class="mut">${r[p.vr].toFixed(1)}x</span><span class="${flcls(r[p.smart])} small">수급 ${fmt.pct(r[p.smart], 2)}</span></button>`).join("")}</div>`
+      <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span class="${fmt.cls(r[p.ret])}">${fmt.pct(r[p.ret])}</span><span class="mut">${r[p.vr].toFixed(1)}x</span>${(() => { const v = domVal(r, p); return v == null ? "" : `<span class="${v >= 0 ? "c-frgn" : "c-inst"} small">${v >= 0 ? "외국인" : "기관"} 우위${bothSell(r, p) ? " (둘 다 매도)" : ""}</span>`; })()}</button>`).join("")}</div>`
       : `<div class="mut small">이 기간에 거래량 3배 이상 종목이 없습니다</div>`;
     $("#mapOutliers").querySelectorAll("button").forEach(b => b.onclick = () => openDetail(b.dataset.code));
-    $("#scatterLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, cLim, M.color === "ret" ? 1 : 2)
+    $("#scatterLegend").innerHTML = (M.color === "ret" ? legend(`등락(${M.period}일)`, cLim, 1, STOPS) : domLegend(p, cLim))
       + `<span>점 크기 = ${p.amtLabel}</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
@@ -224,10 +229,14 @@
     el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
   }
 
-  function legend(title, lim, d) {
+  function domLegend(p, lim) {
+    const steps7 = [-1, -0.5, -0.15, 0, 0.15, 0.5, 1];
+    return `<span>${p.fd} 순매수 비교</span><span class="mut">기관 우위</span><span class="lg">${steps7.map(s => `<i style="background:${divColor(Math.sign(s) * s * s * lim, lim, FSTOPS)}"></i>`).join("")}</span><span class="mut">외국인 우위 (색 = 외국인 − 기관, 발행주식 대비 ±${lim.toFixed(2)}%p) · 둘 다 순매도면 흐리게</span>`;
+  }
+  function legend(title, lim, d, stops) {
     const steps = [-1, -0.5, 0, 0.5, 1];
     const steps7 = [-1, -0.5, -0.15, 0, 0.15, 0.5, 1];
-    return `<span>${title}</span><span class="lg">${steps7.map(s => `<i style="background:${divColor(Math.sign(s) * s * s * lim, lim)}"></i>`).join("")}</span><span class="mut">−${lim.toFixed(d)}% … +${lim.toFixed(d)}% (화면 종목 92%가 이 안, 작은 변동 강조)</span>`;
+    return `<span>${title}</span><span class="lg">${steps7.map(s => `<i style="background:${divColor(Math.sign(s) * s * s * lim, lim, stops)}"></i>`).join("")}</span><span class="mut">−${lim.toFixed(d)}% … +${lim.toFixed(d)}% (화면 종목 92%가 이 안, 작은 변동 강조)</span>`;
   }
 
   // ---------- ② 트리맵 ----------
@@ -261,9 +270,9 @@
     rows.forEach(r => (bySec[r.sector_name || "기타 업종"] ||= []).push(r));
     let secs = Object.entries(bySec).map(([k, v]) => [k, v, v.reduce((s, r) => s + r.marcap, 0)]).sort((a, b) => b[2] - a[2]);
     if (secs.length > SEC) { const rest = secs.slice(SEC).flatMap(s => s[1]); secs = secs.slice(0, SEC).concat([["기타 업종", rest, rest.reduce((s, r) => s + r.marcap, 0)]]); }
-    const val = r => M.color === "ret" ? r[p.ret] : r[p.smart];
-    const lim = autoLim(rows.map(val), M.color === "ret" ? 1 : 0.05);
-    const col = r => divColor(val(r), lim);
+    const val = r => r[p.ret]; // 시장 지도: 항상 등락
+    const lim = autoLim(rows.map(val), 1);
+    const col = r => divColor(val(r), lim, STOPS); // 시장 지도는 항상 등락 색
     let html = "", idx = [], BAR = 0;
     if (ZOOM) {
       const hit = secs.find(x => x[0] === ZOOM);
@@ -275,7 +284,7 @@
         const sw = list.reduce((a, r) => a + r.marcap, 0), sv = list.reduce((a, r) => a + r.marcap * (val(r) || 0), 0) / (sw || 1);
         secs = [[ZOOM, list, sw]];
         html += `<g class="t-back" data-back="1"><rect x="0" y="0" width="${W}" height="${BAR - 2}" class="t-barbg"/>
-          <text x="10" y="19" class="t-bar">◀ ${esc(ZOOM)} <tspan class="${M.color === "smart" ? (sv >= 0 ? "t-fu" : "t-fd") : (sv >= 0 ? "t-up" : "t-dn")}">${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%</tspan> <tspan class="t-barsub">· ${list.length}종목 · 누르면 전체 업종으로</tspan></text></g>`;
+          <text x="10" y="19" class="t-bar">◀ ${esc(ZOOM)} <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${sv >= 0 ? "+" : ""}${sv.toFixed(1)}%</tspan> <tspan class="t-barsub">· ${list.length}종목 · 누르면 전체 업종으로</tspan></text></g>`;
       }
     }
     const outer = squarify(secs.map(s => s[2]), 0, BAR, W, H - BAR);
@@ -286,10 +295,10 @@
       // 업종 시총가중 등락
       const sw = list.reduce((s, r) => s + r.marcap, 0), sv = list.reduce((s, r) => s + r.marcap * (val(r) || 0), 0) / (sw || 1);
       if (hdr) {
-        const pctTxt = `${sv >= 0 ? "+" : ""}${sv.toFixed(M.color === "ret" ? 1 : 2)}%`;
+        const pctTxt = `${sv >= 0 ? "+" : ""}${sv.toFixed(1)}%`;
         const full = name.length * 11 + pctTxt.length * 7 + 14 < o.w;
         const nm = fit(name, o.w - 10 - (full ? pctTxt.length * 7 + 4 : 0), 11);
-        html += `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${hdr + 1}" class="t-hdr" data-sec="${esc(name)}"><title>${esc(name)} 확대</title></rect><text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${M.color === "smart" ? (sv >= 0 ? "t-fu" : "t-fd") : (sv >= 0 ? "t-up" : "t-dn")}">${pctTxt}</tspan>` : ""}</text>`;
+        html += `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${hdr + 1}" class="t-hdr" data-sec="${esc(name)}"><title>${esc(name)} 확대</title></rect><text x="${o.x + 5}" y="${o.y + 13}" class="t-sec">${esc(nm)}${full ? ` <tspan class="${sv >= 0 ? "t-up" : "t-dn"}">${pctTxt}</tspan>` : ""}</text>`;
       }
       list.forEach((r, k) => {
         const q = inner[k]; idx.push(r);
@@ -299,7 +308,7 @@
           let fs = Math.max(9, Math.min(15, q.w / 7, q.h / 2.8));
           fs = Math.max(8.5, Math.min(fs, (q.w - 6) / (String(r.name).length * 0.98)));
           html += `<text x="${q.x + q.w / 2}" y="${q.y + q.h / 2 - fs * 0.15}" font-size="${fs}" fill="${textOn(val(r), lim)}" class="t-name" text-anchor="middle">${esc(fit(r.name, q.w - 6, fs))}</text>
-            <text x="${q.x + q.w / 2}" y="${q.y + q.h / 2 + fs * 1.05}" font-size="${fs * 0.85}" fill="${textOn(val(r), lim)}" class="t-name" text-anchor="middle">${fmt.pct(val(r), M.color === "ret" ? 1 : 2)}</text>`;
+            <text x="${q.x + q.w / 2}" y="${q.y + q.h / 2 + fs * 1.05}" font-size="${fs * 0.85}" fill="${textOn(val(r), lim)}" class="t-name" text-anchor="middle">${fmt.pct(val(r), 1)}</text>`;
         }
       });
     });
@@ -312,7 +321,7 @@
       c.addEventListener("mouseleave", hideTip);
       c.addEventListener("click", () => { hideTip(); openDetail(r.code); });
     });
-    $("#treeLegend").innerHTML = legend(M.color === "ret" ? `등락(${M.period}일)` : `${p.flow} 순매수 / 발행주식`, lim, M.color === "ret" ? 1 : 2)
+    $("#treeLegend").innerHTML = legend(`등락(${M.period}일)`, lim, 1, STOPS)
       + `<span>${ZOOM ? `면적 = 시가총액 · ${esc(ZOOM)} 전 종목` : `면적 = 시가총액 · 시총 상위 ${N} · 업종 이름을 누르면 그 업종만 확대`} · 업종 숫자는 시총가중 평균</span><span><i class="ring"></i>보유 종목</span>`;
   }
 
