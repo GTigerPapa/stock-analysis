@@ -74,8 +74,11 @@
         <div class="legend"><span><i style="background:#e0a100"></i>MA20</span><span><i style="background:#2f8c78"></i>MA60</span><span><i style="background:#8b5cf6"></i>MA120</span><span><i style="background:#8a94a3"></i>MA200</span>
           ${[1, 2, 3, 4].map(s => `<span><i class="sw" style="background:${STAGE[s][1].replace(/[\d.]+\)$/, ".7)")}"></i>${STAGE[s][0]}</span>`).join("")}</div></div>
 
-      <div class="sec"><h4><span class="c-frgn">외국인</span>·<span class="c-inst">기관</span> 일별 순매수 <span class="mut">위 띠 = 외국인 · 아래 띠 = 기관 · 기준선 위로 = 순매수, 아래로 = 순매도(연하게) · 두 띠 같은 눈금</span></h4>
-        <div class="chart mid" id="chFlow"></div><div class="flow-sum" id="flowSum"></div></div>
+      <div class="sec"><h4><span class="c-frgn">외국인</span>·<span class="c-inst">기관</span> 일별 순매수 <span class="mut">0선 위 = 순매수, 아래 = 순매도 (천 주) · 극단값 상위 2%는 축 밖으로 잘림</span>
+        <label class="chk inline"><input type="checkbox" id="flowSmooth"> 5일 평균</label></h4>
+        <div class="chart mid" id="chFlow"></div>
+        <div class="legend"><span><i style="background:${FR()}"></i>외국인</span><span><i style="background:${IN()}"></i>기관</span></div>
+        <div class="flow-sum" id="flowSum"></div></div>
 
       <div class="sec"><h4>거래량 배수 <span class="mut">그날 거래량 ÷ 20·60·120일 평균 (로그 축, 1x = 평소)</span>
         <label class="chk inline"><input type="checkbox" id="vrSmooth"> 5일 평활</label></h4>
@@ -152,26 +155,31 @@
       s.setData(dates.map((t, i) => m[i] == null ? { time: t } : { time: t, value: m[i] }));
     });
 
-    // 수급: 위 띠 = 외국인, 아래 띠 = 기관 (각자 기준선, 위로 = 순매수 / 아래로 = 순매도)
+    // 수급: 외국인·기관 일별 순매수를 한 축(같은 0선, 같은 눈금)에 겹친 라인
     const invMap = new Map((d.inv || []).map(r => [r[0], r]));
     const c2 = LightweightCharts.createChart($("#chFlow"), Object.assign(baseOpts(), {
-      rightPriceScale: { visible: false }, leftPriceScale: { visible: false },
+      localization: { locale: "ko-KR", priceFormatter: v => (v > 0 ? "+" : "") + Math.round(v / 1000).toLocaleString("ko-KR") + "K" },
     })); charts.push(c2);
-    const fS = c2.addHistogramSeries({ priceScaleId: "f", lastValueVisible: false, priceLineVisible: false, color: FR(), base: 0 });
-    const iS = c2.addHistogramSeries({ priceScaleId: "i", lastValueVisible: false, priceLineVisible: false, color: IN(), base: 0 });
-    // 두 띠의 세로 스케일을 같게(같은 주식 수 = 같은 막대 길이) — 최대 절대값 기준 대칭
-    // 눈금 = 상위 2% 극단값을 제외한 최대치 (튀는 날 하나가 전체를 납작하게 만들지 않게; 그런 날은 띠 끝에서 잘림)
-    const absV = (d.inv || []).flatMap(r => [Math.abs(r[1] || 0), Math.abs(r[2] || 0)]).sort((a, b) => a - b);
-    const mxv = Math.max(1, (absV[Math.floor(absV.length * 0.98)] || 1) * 1.1);
-    const sym = () => ({ priceRange: { minValue: -mxv, maxValue: mxv } });
-    fS.applyOptions({ autoscaleInfoProvider: sym }); iS.applyOptions({ autoscaleInfoProvider: sym });
-    c2.priceScale("f").applyOptions({ scaleMargins: { top: 0.04, bottom: 0.54 } });
-    c2.priceScale("i").applyOptions({ scaleMargins: { top: 0.54, bottom: 0.04 } });
-    fS.setData(dates.map(t => { const r = invMap.get(t); return r && r[1] != null ? { time: t, value: r[1], color: r[1] >= 0 ? FR() : rgba(FR(), .55) } : { time: t }; }));
-    iS.setData(dates.map(t => { const r = invMap.get(t); return r && r[2] != null ? { time: t, value: r[2], color: r[2] >= 0 ? IN() : rgba(IN(), .55) } : { time: t }; }));
+    const lineOpt = color => ({ color, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
+    const fS = c2.addLineSeries(lineOpt(FR())), iS = c2.addLineSeries(lineOpt(IN()));
+    fS.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.06 } });
+    const rawF = dates.map(t => { const r = invMap.get(t); return r && r[1] != null ? r[1] : null; });
+    const rawI = dates.map(t => { const r = invMap.get(t); return r && r[2] != null ? r[2] : null; });
+    const ma5 = a => a.map((_, i) => { const w = a.slice(Math.max(0, i - 4), i + 1).filter(x => x != null); return w.length === 5 ? w.reduce((s, x) => s + x, 0) / 5 : null; });
     const zc = isDark() ? "#5b636c" : "#b9b9b4";
     fS.createPriceLine({ price: 0, color: zc, lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
-    iS.createPriceLine({ price: 0, color: zc, lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
+    const setFlow = smooth => {
+      const F = smooth ? ma5(rawF) : rawF, I = smooth ? ma5(rawI) : rawI;
+      // 0을 가운데 둔 대칭 눈금. 상위 2% 극단값은 제외 (튀는 하루가 나머지를 납작하게 만들지 않게)
+      const absV = F.concat(I).filter(x => x != null).map(Math.abs).sort((a, b) => a - b);
+      const mxv = Math.max(1, (absV[Math.floor(absV.length * 0.98)] || 1) * 1.1);
+      const sym = () => ({ priceRange: { minValue: -mxv, maxValue: mxv } });
+      fS.applyOptions({ autoscaleInfoProvider: sym }); iS.applyOptions({ autoscaleInfoProvider: sym });
+      fS.setData(dates.map((t, i) => F[i] == null ? { time: t } : { time: t, value: F[i] }));
+      iS.setData(dates.map((t, i) => I[i] == null ? { time: t } : { time: t, value: I[i] }));
+    };
+    setFlow(false);
+    $("#flowSmooth").onchange = e => setFlow(e.target.checked);
     const sumN = n => { const rs = (d.inv || []).slice(-n); return [rs.reduce((s, r) => s + (r[1] || 0), 0), rs.reduce((s, r) => s + (r[2] || 0), 0)]; };
     const [f20, i20] = sumN(20), [f60, i60] = sumN(60);
     const k = v => `<b>${v > 0 ? "+" : ""}${Math.round(v / 1000).toLocaleString()}천 주</b> ${v >= 0 ? "순매수" : "순매도"}`;
