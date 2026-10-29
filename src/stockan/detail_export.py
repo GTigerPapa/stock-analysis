@@ -4,6 +4,7 @@
   d   : 최근 520거래일 일봉  [date, open, high, low, close, volume]
   inv : 최근 520거래일 수급  [date, 외국인, 기관, 개인] (주)
   mo  : 월말 종가 (최대 6년) [YYYY-MM, close]
+  y0  : 연도별 첫 거래일 종가 [YYYY, 날짜, close]
   fq / fa : 분기 / 연간 실적  {period, consensus, 항목: 값}
   desc: 종목 설명, sector_desc: 업종 설명, f: 지표 전체
 """
@@ -52,6 +53,10 @@ def export_details(df: pd.DataFrame) -> int:
 
     mo["ym"] = mo["date"].str[:7]
     mlast = mo.groupby(["code", "ym"]).close.last().reset_index()
+    # 연도별 첫 거래일 종가 (월별 Trend의 연초 기준가)
+    mo["y"] = mo["date"].str[:4]
+    yfirst = mo.groupby(["code", "y"]).agg(d0=("date", "first"), c0=("close", "first")).reset_index()
+    yg = {k: g for k, g in yfirst.groupby("code")}
     pg = {k: g for k, g in px.groupby("code")}
     mg = {k: g for k, g in mlast.groupby("code")}
     ig = {k: g for k, g in inv.groupby("code")}
@@ -86,6 +91,7 @@ def export_details(df: pd.DataFrame) -> int:
             "d": [[r.date, _r(r.open, 0), _r(r.high, 0), _r(r.low, 0), _r(r.close, 0), int(r.volume or 0)] for r in p.itertuples()],
             "inv": [] if i is None else [[r.date, _r(r.foreign_net, 0), _r(r.inst_net, 0), _r(r.indiv_net, 0)] for r in i.tail(DAILY_N).itertuples()],
             "mo": [] if code not in mg else [[r.ym, _r(r.close, 0)] for r in mg[code].itertuples()],
+            "y0": [] if code not in yg else [[r.y, r.d0, _r(r.c0, 0)] for r in yg[code].itertuples()],
             "fq": fin_rows(fg.get(code), "quarter"),
             "fa": fin_rows(fg.get(code), "annual"),
         }

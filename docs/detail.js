@@ -99,7 +99,7 @@
 
       <div class="sec"><h4>수급 캘린더 <span class="mut">하루 1칸 · 색 = 순매수 ÷ 20일 평균 거래량</span></h4><div id="cal" class="svgbox"></div></div>
 
-      <div class="sec"><h4>월별 Trend <span class="mut">전월 대비 등락률 · 연도별 선, 점 = 한 달</span></h4><div id="mon" class="svgbox"></div></div>
+      <div class="sec"><h4>월별 Trend <span class="mut">연초 첫 거래일 종가 대비 각 달 말 종가 · 연도별 선, 점 = 한 달</span></h4><div id="mon" class="svgbox"></div></div>
 
       <details class="sec"><summary>전체 지표 보기</summary>${featureGrid(f)}</details>`;
 
@@ -365,37 +365,45 @@
     el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}</span><span>순매수</span><span class="lg">${[.5, 1].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}${[.5, 1].map(v => `<i style="background:${COL[2](v * .25)}"></i>`).join("")}</span><span class="mut">순매수 = 고유색 진하게(<span class="c-frgn">외국인</span>/<span class="c-inst">기관</span>) · 순매도 = 회색 진하게 · 평균 거래량의 ±25%에서 가장 진함</span></div>`;
   }
 
-  // ---------- 월별 Trend (전월비) ----------
+  // ---------- 월별 Trend (연초 대비 누적) ----------
+  // 각 점 = 그 달 말 종가 ÷ 그해 첫 거래일 종가 − 1. 선은 연초(0%)에서 출발
   function drawMonthly(d) {
     const el = $("#mon"), mo = d.mo || [];
     if (mo.length < 3) { el.innerHTML = `<div class="empty">데이터 부족</div>`; return; }
+    // 연초 기준가: 첫 거래일 종가(y0). 없으면 일봉에서 찾고, 그래도 없으면 전년 12월 말 종가로 대신
+    const base = {}, late = {};
+    (d.y0 || []).forEach(([y, dt, c]) => { if (c) { base[y] = c; if (dt.slice(5) > "01-15") late[y] = dt; } });
+    (d.d || []).forEach(r => { const y = r[0].slice(0, 4); if (!(y in base) && r[4]) base[y] = r[4]; });
+    mo.forEach(([ym, c], i) => { const y = String(+ym.slice(0, 4) + 1); if (ym.slice(5) === "12" && !(y in base) && c) base[y] = c; });
     const byY = {};
-    for (let i = 1; i < mo.length; i++) {
-      const [ym, c] = mo[i], p = mo[i - 1][1]; if (!p) continue;
-      const y = ym.slice(0, 4), m = +ym.slice(5);
-      (byY[y] ||= {})[m] = (c / p - 1) * 100;
-    }
-    const years = Object.keys(byY).sort().slice(-5);
-    const vals = years.flatMap(y => Object.values(byY[y])), lim = Math.min(60, Math.max(10, Math.ceil(Math.max(...vals.map(Math.abs)) / 10) * 10));
-    const W = 720, H = 280, L = 44, R = 70, T = 12, B = 26;
-    const X = m => L + (m - 1) / 11 * (W - L - R), Y = v => T + (1 - (Math.max(-lim, Math.min(lim, v)) + lim) / (2 * lim)) * (H - T - B);
+    mo.forEach(([ym, c]) => { const y = ym.slice(0, 4); if (base[y] && c) (byY[y] ||= { 0: 0 })[+ym.slice(5)] = (c / base[y] - 1) * 100; });
+    const years = Object.keys(byY).filter(y => Object.keys(byY[y]).length > 1).sort().slice(-5);
+    if (!years.length) { el.innerHTML = `<div class="empty">데이터 부족</div>`; return; }
+    const vals = years.flatMap(y => Object.values(byY[y]));
+    const rawLo = Math.min(0, ...vals), rawHi = Math.max(0, ...vals);
+    const span = Math.max(20, rawHi - rawLo), step = [5, 10, 20, 25, 50, 100, 200].find(v => span / v <= 6) || 500;
+    const lo = Math.min(-step, Math.floor(rawLo / step) * step), hi = Math.max(step, Math.ceil(rawHi / step) * step);
+    const W = 720, H = 280, L = 48, R = 70, T = 12, B = 26;
+    const X = m => L + m / 12 * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
     const pal = ["#b9c2cc", "#93a3b5", "#6f86a3", "#2f8c78", isDark() ? "#f2f2f0" : "#1f2328"];
     const cols = years.map((_, i) => pal[pal.length - years.length + i]);
     let s = `<svg viewBox="0 0 ${W} ${H}" class="mon">`;
-    for (let v = -lim; v <= lim; v += lim / 2) s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="${v === 0 ? "mz" : "pg"}"/><text x="${L - 6}" y="${Y(v) + 4}" class="ax" text-anchor="end">${v > 0 ? "+" : ""}${v}%</text>`;
+    for (let v = lo; v <= hi + 1e-9; v += step) s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="${v === 0 ? "mz" : "pg"}"/><text x="${L - 6}" y="${Y(v) + 4}" class="ax" text-anchor="end">${v > 0 ? "+" : ""}${v}%</text>`;
+    s += `<text x="${X(0)}" y="${H - 6}" class="ax" text-anchor="middle">연초</text>`;
     for (let m = 1; m <= 12; m++) s += `<text x="${X(m)}" y="${H - 6}" class="ax" text-anchor="middle">${m}월</text>`;
     years.forEach((y, i) => {
       const pts = Object.entries(byY[y]).map(([m, v]) => [+m, v]).sort((a, b) => a[0] - b[0]);
       const last = i === years.length - 1, w = last ? 2.4 : 1.4;
       for (let j = 1; j < pts.length; j++) if (pts[j][0] === pts[j - 1][0] + 1)
         s += `<line x1="${X(pts[j - 1][0])}" y1="${Y(pts[j - 1][1])}" x2="${X(pts[j][0])}" y2="${Y(pts[j][1])}" stroke="${cols[i]}" stroke-width="${w}"/>`;
-      pts.forEach(([m, v]) => s += `<circle cx="${X(m)}" cy="${Y(v)}" r="${last ? 4 : 3}" fill="${cols[i]}" class="mp"><title>${y}년 ${m}월 ${v > 0 ? "+" : ""}${v.toFixed(1)}%</title></circle>`);
+      pts.forEach(([m, v]) => { if (m) s += `<circle cx="${X(m)}" cy="${Y(v)}" r="${last ? 4 : 3}" fill="${cols[i]}" class="mp"><title>${y}년 ${m}월 말 · 연초 대비 ${v > 0 ? "+" : ""}${v.toFixed(1)}%</title></circle>`; });
       const e = pts[pts.length - 1];
       s += `<text x="${X(e[0]) + 7}" y="${Y(e[1]) + 4}" fill="${cols[i]}" class="ml">${y}</text>`;
     });
-    // 연간 수익률
-    const yr = years.map(y => { const ms = Object.values(byY[y]); return ms.reduce((a, v) => a * (1 + v / 100), 1) * 100 - 100; });
-    el.innerHTML = s + `</svg><div class="legend">${years.map((y, i) => `<span><i style="background:${cols[i]}"></i>${y} <b class="${fmt.cls(yr[i])}">${fmt.pct(yr[i], 0)}</b>${y === String(new Date().getFullYear()) ? " (연초 이후)" : ""}</span>`).join("")}</div>`;
+    // 연간 수익률 = 마지막 월말 ÷ 연초 첫 거래일
+    const yr = years.map(y => { const ks = Object.keys(byY[y]).map(Number); return byY[y][Math.max(...ks)]; });
+    const cy = String(new Date().getFullYear());
+    el.innerHTML = s + `</svg><div class="legend">${years.map((y, i) => `<span><i style="background:${cols[i]}"></i>${y} <b class="${fmt.cls(yr[i])}">${fmt.pct(yr[i], 0)}</b>${y === cy ? " (연초 이후)" : late[y] ? ` (${late[y].slice(5).replace("-", "/")} 상장 후)` : ""}</span>`).join("")}</div>`;
   }
 
   // 닫을 때 차트 정리
