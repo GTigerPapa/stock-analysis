@@ -5,6 +5,8 @@
   inv : 최근 520거래일 수급  [date, 외국인, 기관, 개인] (주)
   mo  : 월말 종가 (최대 6년) [YYYY-MM, close]
   y0  : 연도별 첫 거래일 종가 [YYYY, 날짜, close]
+  own : 지분 구성 추이 {fr: [[date, 외국인 지분율%]] (주 1점), mj: {n: 최대주주명, p0, s: [[보고일, %]]}, np: {p0, s}}
+        mj·np 는 DART 대량보유 보고(5% 룰) 기준 계단 시계열. p0 = 첫 보고 이전 지분율
   fq / fa : 분기 / 연간 실적  {period, consensus, 항목: 값}
   desc: 종목 설명, sector_desc: 업종 설명, f: 지표 전체
 """
@@ -18,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from .config import DOCS_DATA
+from .dart import holder_series
 from .db import read_df
 from .sector_info import SECTOR_INFO
 
@@ -44,7 +47,12 @@ def export_details(df: pd.DataFrame) -> int:
         "SELECT code,date,open,high,low,close,volume FROM prices WHERE venue='KRX' AND date>=? ORDER BY code,date", (start_d,)
     )
     mo = read_df("SELECT code,date,close FROM prices WHERE venue='KRX' AND date>=? ORDER BY code,date", (start_m,))
-    inv = read_df("SELECT code,date,foreign_net,inst_net,indiv_net FROM investor WHERE date>=? ORDER BY code,date", (start_d,))
+    inv = read_df("SELECT code,date,foreign_net,inst_net,indiv_net,foreign_ratio FROM investor WHERE date>=? ORDER BY code,date", (start_d,))
+    try:
+        own = read_df("SELECT code,rcept_no,date,holder,pct,chg FROM ownership ORDER BY code,date")
+        og = {k: g.replace({np.nan: None}).to_dict("records") for k, g in own.groupby("code")}
+    except Exception:  # noqa: BLE001  (테이블 없음 등 → 외국인 지분율만 표시)
+        og = {}
     fin = read_df("SELECT code,period_type,period,item,value,is_consensus FROM finance")
     try:
         prof = dict(read_df("SELECT code,description FROM profiles").values.tolist())
@@ -61,6 +69,18 @@ def export_details(df: pd.DataFrame) -> int:
     mg = {k: g for k, g in mlast.groupby("code")}
     ig = {k: g for k, g in inv.groupby("code")}
     fg = {k: g for k, g in fin.groupby("code")}
+
+    def own_block(code, i):
+        """외국인 지분율(주 1점, 마지막 날 포함) + DART 최대주주·국민연금 계단 시계열."""
+        out = {"fr": []}
+        if i is not None:
+            fr = i.tail(DAILY_N)[["date", "foreign_ratio"]].dropna()
+            if len(fr):
+                fr = fr.iloc[::-1].iloc[::5].iloc[::-1]
+                out["fr"] = [[r.date, _r(r.foreign_ratio)] for r in fr.itertuples()]
+        if code in og:
+            out.update(holder_series(og[code]))
+        return out
 
     def fin_rows(g, kind):
         if g is None:
@@ -92,6 +112,7 @@ def export_details(df: pd.DataFrame) -> int:
             "inv": [] if i is None else [[r.date, _r(r.foreign_net, 0), _r(r.inst_net, 0), _r(r.indiv_net, 0)] for r in i.tail(DAILY_N).itertuples()],
             "mo": [] if code not in mg else [[r.ym, _r(r.close, 0)] for r in mg[code].itertuples()],
             "y0": [] if code not in yg else [[r.y, r.d0, _r(r.c0, 0)] for r in yg[code].itertuples()],
+            "own": own_block(code, i),
             "fq": fin_rows(fg.get(code), "quarter"),
             "fa": fin_rows(fg.get(code), "annual"),
         }

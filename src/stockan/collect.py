@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from . import naver
+from . import dart, naver
 from .config import BACKFILL_YEARS, INVESTOR_BACKFILL_DAYS, WORKERS
 from .db import log, read_df, session, upsert
 
@@ -306,3 +306,35 @@ def update_profiles(codes: list[str] | None = None, only_missing: bool = False) 
                 con.execute("INSERT OR REPLACE INTO profiles VALUES (?,?,?)", (code, desc, today))
                 n += 1
         log(con, "profiles", "ok", f"{n} rows")
+
+
+# ---------------- 지분 구성: DART 대량보유 보고 (최대주주·국민연금) ----------------
+def update_ownership(codes: list[str] | None = None) -> None:
+    """DART_API_KEY 가 없으면 건너뜀(실패 아님). 회사당 1회 호출, 주 1회면 충분."""
+    if not dart.api_key():
+        logger.info("지분: DART_API_KEY 없음 — 건너뜀 (.env 에 넣으면 최대주주·국민연금 지분이 수집됨)")
+        return
+    codes = codes or universe_codes()
+    today = date.today().isoformat()
+    cmap = dart.corp_codes()
+    with session() as con:
+        upsert(con, "dart_corp", [{"code": c, "corp_code": cmap[c], "updated_at": today} for c in codes if c in cmap])
+    targets = [c for c in codes if c in cmap]
+    stop = {"err": None}
+
+    def job(code):
+        if stop["err"]:
+            return []
+        try:
+            return dart.majorstock_rows(code, cmap[code])
+        except dart.DartError as e:  # 키 오류·한도 초과: 남은 호출 중단
+            stop["err"] = e
+            return []
+
+    n = 0
+    with session() as con:
+        for _, rows in _parallel(job, targets, "지분", workers=min(WORKERS, 4)):
+            n += upsert(con, "ownership", rows)
+        log(con, "ownership", "fail" if stop["err"] else "ok", f"{n} rows {stop['err'] or ''}")
+    if stop["err"]:
+        raise stop["err"]

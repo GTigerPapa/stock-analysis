@@ -99,6 +99,9 @@
 
       <div class="sec"><h4>수급 캘린더 <span class="mut">하루 1칸 · 색 = 순매수 ÷ 20일 평균 거래량</span></h4><div id="cal" class="svgbox"></div></div>
 
+      <div class="sec"><h4>지분 구성 추이 <span class="seg mini" id="ownSeg"><button data-v="float" class="on">유통주식 기준</button><button data-v="all">전체 기준</button></span>
+        <span class="mut">국민연금·최대주주는 DART 5% 보고 기준 계단, 외국인은 주 1점</span></h4><div id="own" class="svgbox"></div></div>
+
       <div class="sec"><h4>월별 Trend <span class="mut">연초 첫 거래일 종가 대비 각 달 말 종가 · 연도별 선, 점 = 한 달</span></h4><div id="mon" class="svgbox"></div></div>
 
       <details class="sec"><summary>전체 지표 보기</summary>${featureGrid(f)}</details>`;
@@ -116,6 +119,10 @@
       $("#finSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawFin(d, b.dataset.v);
     });
     drawCalendar(d);
+    drawOwnership(d, "float");
+    $("#ownSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+      $("#ownSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawOwnership(d, b.dataset.v);
+    });
     drawMonthly(d);
   };
 
@@ -363,6 +370,64 @@
     let lastM = "";
     inv.forEach(r => { const m = r[0].slice(0, 7); if (m !== lastM && new Date(r[0]).getDate() <= 7) { lastM = m; s += `<text x="${40 + wk(r[0]) * (cell + gapW)}" y="8" class="ax">${m.slice(2).replace("-", ".")}</text>`; } });
     el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}</span><span>순매수</span><span class="lg">${[.5, 1].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}${[.5, 1].map(v => `<i style="background:${COL[2](v * .25)}"></i>`).join("")}</span><span class="mut">순매수 = 고유색 진하게(<span class="c-frgn">외국인</span>/<span class="c-inst">기관</span>) · 순매도 = 회색 진하게 · 평균 거래량의 ±25%에서 가장 진함</span></div>`;
+  }
+
+  // ---------- 지분 구성 추이 (100% 누적 영역) ----------
+  // 기본 = 유통주식 기준: 최대주주(특수관계인 포함) 몫을 빼고 남은 주식을 100%로 다시 잡아 국민연금 → 외국인 → 기타를 쌓는다
+  // (최대주주가 화면 대부분을 차지해 움직이는 주체가 얇게 눌리는 것을 막기 위함). 전체 기준 보기는 토글로 유지
+  function drawOwnership(d, mode) {
+    const el = $("#own"), seg = $("#ownSeg"), o = d.own || {}, fr = (o.fr || []).filter(r => r[1] != null);
+    if (fr.length < 2) { if (seg) seg.style.display = "none"; el.innerHTML = `<div class="empty">지분 데이터가 아직 없습니다. 다음 일일 실행에서 생성됩니다.</div>`; return; }
+    const at = (h, t) => { if (!h) return 0; let v = h.p0 || 0; for (const [dt, p] of h.s) { if (dt <= t) v = p; else break; } return v; };
+    let rows = fr.map(([t, f]) => ({ t, mj: at(o.mj, t), np: at(o.np, t), fr: f }));
+    // 합이 100을 넘으면 최대주주가 외국인이라는 뜻(외국인 지분율에 이미 포함) → 외국인에서 최대주주 몫을 뺀다
+    const overlap = rows.some(r => r.mj + r.np + r.fr > 100.5);
+    rows = rows.map(r => { const f = overlap ? Math.max(0, r.fr - r.mj) : r.fr; return { ...r, fr: f, ot: Math.max(0, 100 - r.mj - r.np - f) }; });
+    const canFloat = !!o.mj && rows.every(r => r.mj < 99);
+    if (seg) seg.style.display = canFloat ? "" : "none";
+    const isFloat = canFloat && mode !== "all";
+    // 화면에 그릴 값(v) — 유통주식 기준이면 (100 − 최대주주)로 나눠 다시 100%로
+    const view = rows.map(r => { const k = isFloat ? 100 / (100 - r.mj) : 1; return { t: r.t, mj: isFloat ? 0 : r.mj, np: r.np * k, fr: r.fr * k, ot: r.ot * k, raw: r }; });
+    const LAY = [
+      ["mj", o.mj ? `최대주주 (${o.mj.n} 외)` : "최대주주", isDark() ? "#7f95b3" : "#5d7594", !!o.mj && !isFloat],
+      ["np", "국민연금", "#8b5cf6", !!o.np],
+      ["fr", overlap ? "외국인 (최대주주 제외)" : "외국인", FR(), true],
+      ["ot", "기타 (국내 기관·개인 등)", isDark() ? "#3a4047" : "#dcdad4", true],
+    ].filter(l => l[3]);
+    const W = 720, H = 270, L = 40, R = 14, T = 10, B = 24, n = view.length;
+    const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (1 - v / 100) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" class="own">`;
+    let base = view.map(() => 0);
+    LAY.forEach(([k, , color]) => {
+      const top = view.map((r, i) => base[i] + r[k]);
+      const up = top.map((v, i) => `${X(i).toFixed(1)},${Y(Math.min(100, v)).toFixed(1)}`), dn = base.map((v, i) => `${X(i).toFixed(1)},${Y(Math.min(100, v)).toFixed(1)}`).reverse();
+      s += `<polygon points="${up.concat(dn).join(" ")}" fill="${color}" fill-opacity="${k === "ot" ? 1 : .88}"/>`;
+      s += `<polyline points="${up.join(" ")}" fill="none" stroke="${css("--panel") || "#fff"}" stroke-width="1"/>`;
+      base = top;
+    });
+    [0, 25, 50, 75, 100].forEach(v => s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="pg" opacity=".45"/><text x="${L - 6}" y="${Y(v) + 4}" class="ax" text-anchor="end">${v}%</text>`);
+    let lastQ = "";
+    view.forEach((r, i) => { const m = +r.t.slice(5, 7), q = r.t.slice(0, 5) + Math.ceil(m / 3); if (q !== lastQ) { if (lastQ && i < n - 3) s += `<text x="${X(i)}" y="${H - 6}" class="ax" text-anchor="middle">${r.t.slice(2, 4)}.${String((Math.ceil(m / 3) - 1) * 3 + 1).padStart(2, "0")}</text>`; lastQ = q; } });
+    const cw = (W - L - R) / (n - 1), p1 = v => v.toFixed(v >= 10 ? 1 : 2) + "%";
+    // 유통주식 기준일 때는 화면 비율 뒤에 실제 지분율을 괄호로 함께 표시
+    const both = (r, k) => isFloat ? `${p1(r[k])} (지분율 ${p1(r.raw[k])})` : p1(r[k]);
+    view.forEach((r, i) => s += `<rect x="${(X(i) - cw / 2).toFixed(1)}" y="${T}" width="${cw.toFixed(1)}" height="${H - T - B}" fill="transparent"><title>${r.t}${isFloat ? `\n최대주주 ${p1(r.raw.mj)} 제외 · 유통 ${p1(100 - r.raw.mj)} = 100%` : ""}\n${LAY.map(([k, name]) => `${name} ${both(r, k)}`).join("\n")}</title></rect>`);
+    const a = view[0], z = view[n - 1];
+    const leg = LAY.map(([k, name, color]) => {
+      const dv = z[k] - a[k];
+      return `<span><i style="background:${color}"></i>${esc(name)} <b>${p1(z[k])}</b>${isFloat ? ` <span class="mut">(지분율 ${p1(z.raw[k])})</span>` : ""} <span class="${fmt.cls(dv)}">${dv > 0 ? "+" : ""}${dv.toFixed(2)}p</span></span>`;
+    }).join("");
+    const notes = [];
+    if (isFloat) notes.push(`<b>유통주식 기준</b>: ${esc(o.mj.n)} 외 최대주주 측 ${p1(z.raw.mj)}를 뺀 나머지 ${p1(100 - z.raw.mj)}를 100%로 환산`);
+    notes.push(`증감(p) = ${a.t} 대비`);
+    if (!o.mj && !o.np) notes.push("최대주주·국민연금은 DART 5% 보고가 수집된 뒤 표시됩니다(.env 에 DART_API_KEY 필요, 주 1회 갱신)");
+    else {
+      if (o.np) notes.push("국민연금은 5% 이상일 때만 보고 의무 — 마지막 보고 이후 변동은 다음 보고 때 반영");
+      else notes.push("국민연금 5% 보고 없음(5% 미만이거나 미보유)");
+      if (overlap) notes.push("최대주주가 외국인으로 집계되는 종목이라 외국인 지분에서 최대주주 몫을 제외");
+      else notes.push("최대주주가 외국 법인이면 외국인 지분과 일부 겹칠 수 있음");
+    }
+    el.innerHTML = s + `</svg><div class="legend">${leg}</div><div class="mut small">${notes.join(" · ")}</div>`;
   }
 
   // ---------- 월별 Trend (연초 대비 누적) ----------

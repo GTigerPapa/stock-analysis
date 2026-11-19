@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS features (
 CREATE TABLE IF NOT EXISTS profiles (
     code TEXT PRIMARY KEY, description TEXT, updated_at TEXT
 );
+-- DART 대량보유 보고 이력 (5% 룰). holder = 보고자, pct = 보고 후 지분율(%), chg = 증감(%p)
+CREATE TABLE IF NOT EXISTS ownership (
+    code TEXT, rcept_no TEXT, date TEXT, holder TEXT, pct REAL, chg REAL, report_tp TEXT,
+    PRIMARY KEY (code, rcept_no)
+);
+CREATE TABLE IF NOT EXISTS dart_corp (
+    code TEXT PRIMARY KEY, corp_code TEXT, updated_at TEXT
+);
 CREATE TABLE IF NOT EXISTS run_log (
     run_at TEXT, step TEXT, status TEXT, detail TEXT
 );

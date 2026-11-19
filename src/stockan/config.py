@@ -23,6 +23,7 @@ for d in (DATA_DIR, LOG_DIR, DOCS_DATA):
 WORKERS = int(os.getenv("STOCKAN_WORKERS", "6"))
 KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
 KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
+DART_API_KEY = os.getenv("DART_API_KEY", "")  # OpenDART 인증키 (지분 구성 차트용, 선택)
 
 # 백필 기간 (영업일 기준 ~3년 + 지표 워밍업 여유)
 BACKFILL_YEARS = 5

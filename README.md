@@ -72,3 +72,12 @@ GitHub → Settings → Pages → Source: `Deploy from a branch`, Branch: `main`
 - 수급 백필은 네이버 API 특성상 호출당 60일, 기본 250일까지. 이후 매일 누적.
 - 네이버 비공식 API는 예고 없이 바뀔 수 있다. 실패 시 `logs/`와 `run_log` 테이블 확인.
 - pykrx의 수급·업종·펀더멘털은 KRX 로그인(`KRX_ID/KRX_PW`)이 필요해 사용하지 않는다.
+
+## 지분 구성 추이 (선택: OpenDART)
+
+종목 상세의 「지분 구성 추이」는 외국인 지분율(네이버, 매일)에 최대주주·국민연금 지분(DART 대량보유 보고, 주 1회·일요일)을 겹친 100% 누적 차트다.
+최대주주·국민연금을 보려면 `.env` 에 `DART_API_KEY=...` 를 넣고 한 번 실행한다:
+
+    PYTHONPATH=src .venv/bin/python -m stockan.run_daily --only ownership,features,export
+
+키가 없으면 외국인·기타만 표시된다. 국민연금은 5% 이상일 때만 보고 의무가 있어 그 아래 구간은 마지막 보고값으로 남는다.
