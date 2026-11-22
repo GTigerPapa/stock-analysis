@@ -75,6 +75,12 @@ def stock_features(px: pd.DataFrame, shares: float | None) -> dict:
     f["close_vs_ma200"] = (c.iloc[-1] / f["ma200"] - 1) * 100 if f.get("ma200") else np.nan
     f["close_vs_ma60"] = (c.iloc[-1] / f["ma60"] - 1) * 100 if f.get("ma60") else np.nan
     f["ma_align"] = int(f["ma20"] > f["ma60"] > f["ma120"] > f["ma200"]) if f.get("ma200") else 0
+    # 미너비니 트렌드 템플릿용: 50·150일선, 200일선의 1개월 변화율
+    for w in (50, 150):
+        f[f"ma{w}"] = c.tail(w).mean() if len(c) >= w else np.nan
+    if len(c) >= 221:
+        m200 = c.rolling(200).mean()
+        f["ma200_chg_21"] = (m200.iloc[-1] / m200.iloc[-22] - 1) * 100
     # 200일선 상향 돌파 여부 (최근 20일 내)
     if len(c) >= 220:
         above = (c.tail(220) > c.rolling(200).mean().tail(220)).astype(int)
@@ -88,12 +94,15 @@ def stock_features(px: pd.DataFrame, shares: float | None) -> dict:
     f["high52"], f["low52"] = float(hi), float(lo)
     f["pos_52w"] = (c.iloc[-1] - lo) / (hi - lo) * 100 if hi > lo else np.nan
     f["dd_52w"] = (c.iloc[-1] / hi - 1) * 100
+    f["from_low52"] = (c.iloc[-1] / lo - 1) * 100 if lo > 0 else np.nan
     roll_max = c.tail(250).cummax()
     f["mdd_1y"] = float(((c.tail(250) / roll_max) - 1).min() * 100)
     # 변동성
     tr = pd.concat([px.high - px.low, (px.high - c.shift()).abs(), (px.low - c.shift()).abs()], axis=1).max(axis=1)
     f["atr14_pct"] = float(tr.tail(14).mean() / c.iloc[-1] * 100)
     f["vol_ann_60"] = float(c.pct_change().tail(60).std() * np.sqrt(250) * 100)
+    # 손절 참고폭: ATR 2배, 최대 10%
+    f["stop_atr2_pct"] = float(min(2 * f["atr14_pct"], 10.0))
     # 거래량·거래대금
     f["vol_avg20"] = float(v.tail(20).mean())
     f["vol_ratio20"] = float(v.iloc[-1] / f["vol_avg20"]) if f["vol_avg20"] else np.nan
@@ -223,6 +232,7 @@ def build_features() -> pd.DataFrame:
     # 시장 전체 대비 수익률 백분위
     for w in (20, 60, 120, 250):
         df[f"ret_{w}_pct_rank"] = df[f"ret_{w}"].rank(pct=True) * 100
+    df = add_trend_template(df)
     # 저장
     with session() as con:
         upsert(
@@ -230,6 +240,30 @@ def build_features() -> pd.DataFrame:
             [{"code": r["code"], "date": latest, "payload": json.dumps(_clean(r), ensure_ascii=False)} for r in df.to_dict("records")],
         )
     logger.info("features %d종목 (%s)", len(df), latest)
+    return df
+
+
+def add_trend_template(df: pd.DataFrame) -> pd.DataFrame:
+    """미너비니 트렌드 템플릿 8개 조건 중 충족 개수(tt_score, 0~8).
+
+    1 종가 > 150일선·200일선   2 150일선 > 200일선   3 200일선이 1개월 전보다 상승
+    4 50일선 > 150일선·200일선  5 종가 > 50일선      6 52주 저가 대비 +30% 이상
+    7 52주 고가 대비 −25% 이내  8 1년 수익률 시장 내 백분위 70 이상(상대강도)
+    """
+    df = df.copy()
+    g = {k: pd.to_numeric(df[k], errors="coerce") if k in df.columns else pd.Series(np.nan, index=df.index)
+         for k in ("close", "ma50", "ma150", "ma200", "ma200_chg_21", "from_low52", "dd_52w", "ret_250_pct_rank")}
+    conds = [
+        (g["close"] > g["ma150"]) & (g["close"] > g["ma200"]),
+        g["ma150"] > g["ma200"],
+        g["ma200_chg_21"] > 0,
+        (g["ma50"] > g["ma150"]) & (g["ma50"] > g["ma200"]),
+        g["close"] > g["ma50"],
+        g["from_low52"] >= 30,
+        g["dd_52w"] >= -25,
+        g["ret_250_pct_rank"] >= 70,
+    ]
+    df["tt_score"] = sum(cnd.fillna(False).astype(int) for cnd in conds)
     return df
 
 

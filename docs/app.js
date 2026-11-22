@@ -31,6 +31,7 @@ const COLS = {
   r2_120: { h: "R²", f: r => r.r2_120 == null ? "–" : r.r2_120.toFixed(2), tip: "추세의 매끄러움(1에 가까울수록 직선적)" },
   dd_52w: { h: "52주낙폭", f: r => fmt.pct(r.dd_52w), c: r => fmt.cls(r.dd_52w) },
   close_vs_ma200: { h: "vs200일선", f: r => fmt.pct(r.close_vs_ma200), c: r => fmt.cls(r.close_vs_ma200) },
+  smart_net_20_pct: { h: "외+기20", f: r => fmt.pct(r.smart_net_20_pct, 2), c: r => flcls(r.smart_net_20_pct), tip: "외국인+기관 20일 순매수 / 발행주식수" },
   smart_net_60_pct: { h: "외+기60", f: r => fmt.pct(r.smart_net_60_pct, 2), c: r => flcls(r.smart_net_60_pct), tip: "외국인+기관 60일 순매수 / 발행주식수" },
   frgn_net_60_pct: { h: "외인60", f: r => fmt.pct(r.frgn_net_60_pct, 2), c: r => flcls(r.frgn_net_60_pct) },
   excess_60: { h: "섹터대비60", f: r => fmt.pct(r.excess_60), c: r => fmt.cls(r.excess_60), tip: "종목 60일 수익률 − 업종 중앙값" },
@@ -43,6 +44,12 @@ const COLS = {
   amount_avg20: { h: "거래대금20", f: r => fmt.won(r.amount_avg20) },
   marcap: { h: "시총", f: r => fmt.won(r.marcap) },
   nxt_gap: { h: "NXT갭", f: r => fmt.pct(r.nxt_gap, 2), c: r => fmt.cls(r.nxt_gap), tip: "NXT 애프터마켓 종가 − KRX 종가" },
+  tt_score: { h: "템플릿", f: r => r.tt_score == null ? "–" : `${r.tt_score}/8`, tip: "미너비니 트렌드 템플릿 8개 조건 중 충족 개수" },
+  ret_250_pct_rank: { h: "RS", f: r => fmt.n(r.ret_250_pct_rank), tip: "1년 수익률의 시장 내 백분위(상대강도). 70 이상이 기준" },
+  from_low52: { h: "52주저점대비", f: r => fmt.pct(r.from_low52), c: r => fmt.cls(r.from_low52) },
+  ma200_chg_21: { h: "200일선1M", f: r => fmt.pct(r.ma200_chg_21, 2), c: r => fmt.cls(r.ma200_chg_21), tip: "200일 이동평균의 최근 1개월 변화율(상승 중이어야 함)" },
+  atr14_pct: { h: "ATR%", f: r => fmt.n(r.atr14_pct, 1) + "%", tip: "14일 평균 변동폭 ÷ 종가. 낮을수록 변동성이 수축된 상태" },
+  stop_atr2_pct: { h: "손절폭", f: r => r.stop_atr2_pct == null ? "–" : "−" + r.stop_atr2_pct.toFixed(1) + "%", tip: "ATR 2배, 최대 10%. 매수가 대비 손절 참고 폭" },
   score: { h: "점수", f: r => `<span class="score">${fmt.n(r.score, 1)}</span>` },
   rank: { h: "#", f: r => `<span class="rank">${r.rank}</span>`, cls: "l" },
 };
@@ -94,7 +101,8 @@ function renderPresets() {
   const rules = p.filters.map(f => `${f.f} ${f.op} ${typeof f.v === "number" && Math.abs(f.v) >= 1e8 ? fmt.won(f.v) : f.v ?? ""}`).join(" · ");
   const w = p.score.map(s => `${s.f}${s.w < 0 ? "↓" : ""} ${Math.round(Math.abs(s.w) * 100)}%`).join(" · ");
   $("#presetDesc").innerHTML = `${p.description}<div class="rules">필터: ${rules}<br>점수: ${w}</div>`;
-  renderTable($("#screenTable"), p.rows, SCREEN_COLS, "screen:" + p.id);
+  const cols = (p.cols || SCREEN_COLS).filter(c => COLS[c]);
+  renderTable($("#screenTable"), p.rows, cols, "screen:" + p.id);
 }
 
 // ---------- 관심종목 ----------
@@ -217,7 +225,7 @@ async function loadStock(code) {
 }
 const F = (k, label, fn) => ({ k, label, fn });
 const GROUPS = [
-  ["추세", [F("slope_60", "추세60(연율)", v => fmt.pct(v, 0)), F("slope_120", "추세120(연율)", v => fmt.pct(v, 0)), F("slope_250", "추세250(연율)", v => fmt.pct(v, 0)), F("r2_120", "R²120", v => v?.toFixed(2)), F("close_vs_ma200", "vs 200일선", v => fmt.pct(v)), F("ma_align", "정배열", v => v ? "예" : "아니오"), F("pos_52w", "52주 위치", v => fmt.n(v) + "%"), F("dd_52w", "52주 낙폭", v => fmt.pct(v)), F("mdd_1y", "1년 MDD", v => fmt.pct(v)), F("vol_ann_60", "변동성60(연)", v => fmt.n(v) + "%"), F("rsi14", "RSI14", v => fmt.n(v))]],
+  ["추세", [F("slope_60", "추세60(연율)", v => fmt.pct(v, 0)), F("slope_120", "추세120(연율)", v => fmt.pct(v, 0)), F("slope_250", "추세250(연율)", v => fmt.pct(v, 0)), F("r2_120", "R²120", v => v?.toFixed(2)), F("close_vs_ma200", "vs 200일선", v => fmt.pct(v)), F("ma_align", "정배열", v => v ? "예" : "아니오"), F("pos_52w", "52주 위치", v => fmt.n(v) + "%"), F("dd_52w", "52주 낙폭", v => fmt.pct(v)), F("mdd_1y", "1년 MDD", v => fmt.pct(v)), F("vol_ann_60", "변동성60(연)", v => fmt.n(v) + "%"), F("rsi14", "RSI14", v => fmt.n(v)), F("tt_score", "미너비니 템플릿", v => v + "/8"), F("from_low52", "52주 저점 대비", v => fmt.pct(v)), F("ma200_chg_21", "200일선 1개월", v => fmt.pct(v, 2)), F("stop_atr2_pct", "손절폭(ATR×2)", v => "−" + fmt.n(v, 1) + "%")]],
   ["수급", [F("smart_net_20_pct", "외+기 20일", v => fmt.pct(v, 2)), F("smart_net_60_pct", "외+기 60일", v => fmt.pct(v, 2)), F("smart_net_120_pct", "외+기 120일", v => fmt.pct(v, 2)), F("frgn_net_60_pct", "외국인 60일", v => fmt.pct(v, 2)), F("inst_net_60_pct", "기관 60일", v => fmt.pct(v, 2)), F("foreign_ratio", "외인 지분율", v => fmt.n(v, 2) + "%"), F("foreign_ratio_chg_60", "지분율 60일 변화", v => (v > 0 ? "+" : "") + fmt.n(v, 2) + "p"), F("smart_buy_streak", "연속 순매수", v => v + "일")]],
   ["밸류·실적", [F("per", "PER", v => fmt.n(v, 1)), F("cns_per", "컨센 PER", v => fmt.n(v, 1)), F("pbr", "PBR", v => fmt.n(v, 2)), F("div_yield", "배당수익률", v => fmt.n(v, 2) + "%"), F("target_upside", "목표가 괴리", v => fmt.pct(v, 0)), F("recomm", "투자의견(5만점)", v => fmt.n(v, 2)), F("op_qoq", "영업이익 QoQ", v => fmt.pct(v, 0)), F("op_yoy", "영업이익 YoY", v => fmt.pct(v, 0)), F("rev_yoy", "매출 YoY", v => fmt.pct(v, 0)), F("op_margin_q", "영업이익률", v => fmt.n(v, 1) + "%"), F("roe", "ROE", v => fmt.n(v, 1) + "%"), F("debt_ratio", "부채비율", v => fmt.n(v, 0) + "%")]],
   ["섹터", [F("sector_ret_60", "업종 60일", v => fmt.pct(v)), F("excess_60", "업종 대비 60일", v => fmt.pct(v)), F("excess_120", "업종 대비 120일", v => fmt.pct(v)), F("sector_rs_60", "업종 RS60", v => fmt.n(v)), F("rank_in_sector_60", "업종 내 순위(60일)", v => fmt.n(v)), F("ret_60_pct_rank", "시장 백분위(60일)", v => fmt.n(v))]],

@@ -26,6 +26,7 @@ UNIVERSE_COLS = [
     "excess_60", "excess_120", "sector_rs_60", "rank_in_sector_60", "sector_size", "nxt_close", "nxt_gap", "rsi14",
     "vr5", "vr20", "smart_net_5_pct", "ret_250_pct_rank", "amount", "amount_avg5",
     "frgn_net_5_pct", "inst_net_5_pct", "frgn_net_20_pct", "inst_net_20_pct",
+    "tt_score", "from_low52", "ma200_chg_21", "atr14_pct", "stop_atr2_pct",
 ]
 PRESET_COLS = ["rank", "score"] + UNIVERSE_COLS
 
@@ -129,7 +130,7 @@ def export_all(df: pd.DataFrame) -> None:
         "presets": [
             {
                 "id": p["id"], "name": p["name"], "description": p.get("description", ""),
-                "filters": p.get("filters", []), "score": p.get("score", []),
+                "filters": p.get("filters", []), "score": p.get("score", []), "cols": p.get("cols"),
                 "n_pass": int(len(results[p["id"]])),
                 "rows": _records(results[p["id"]], PRESET_COLS),
             }
