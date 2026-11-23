@@ -81,3 +81,7 @@ GitHub → Settings → Pages → Source: `Deploy from a branch`, Branch: `main`
     PYTHONPATH=src .venv/bin/python -m stockan.run_daily --only ownership,features,export
 
 키가 없으면 외국인·기타만 표시된다. 국민연금은 5% 이상일 때만 보고 의무가 있어 그 아래 구간은 마지막 보고값으로 남는다.
+
+## 해외 보유종목 (보유 탭)
+- `presets/overseas.json` 에 네이버 해외주식 코드(`NVDA.O` 나스닥, `.N` 뉴욕 등)를 넣으면 export 때 보유 탭 아래 '해외 보유' 카드로 표시됩니다. 키 불필요.
+- 평단은 달러로 입력하며 이 브라우저(localStorage)에만 저장됩니다. 원화 환산은 네이버 원/달러 전일 종가 기준.

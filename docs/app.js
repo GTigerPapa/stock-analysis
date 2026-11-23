@@ -192,6 +192,53 @@ async function renderWatch() {
   }
 }
 
+// ---------- 해외 보유 (네이버 해외주식) ----------
+function usd(v, d = 2) { return (v == null || isNaN(v)) ? "–" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function posBlockUS(o, fx) {
+  const key = "US:" + o.code, p = loadPos()[key] || {};
+  const avg = +p.avg || 0, qty = +p.qty || 0, rate = fx?.rate;
+  let res = `<div class="pos-hint">평단(달러)·수량을 입력하면 손익을 달러와 원화(전일 환율)로 보여줍니다. 이 기기 브라우저에만 저장됩니다.</div>`;
+  if (avg > 0 && o.close) {
+    const r = (o.close / avg - 1) * 100, pl = (o.close - avg) * qty;
+    res = `<div class="pos-res">
+      <div><span class="k">수익률</span><span class="v ${fmt.cls(r)}">${fmt.pct(r)}</span></div>
+      ${qty > 0 ? `<div><span class="k">평가손익</span><span class="v ${fmt.cls(r)}">${usd(pl, 0)}${rate ? ` <small>(${fmt.won(pl * rate)}원)</small>` : ""}</span></div>
+      <div><span class="k">평가금액</span><span class="v">${usd(o.close * qty, 0)}${rate ? ` <small>(${fmt.won(o.close * qty * rate)}원)</small>` : ""}</span></div>` : ""}
+      ${r < 0 ? `<div><span class="k">평단 회복까지</span><span class="v">${fmt.pct((avg / o.close - 1) * 100)}</span></div>` : ""}
+      ${o.high52 ? `<div><span class="k">52주 고점 시 수익률</span><span class="v">${fmt.pct((o.high52 / avg - 1) * 100)}</span></div>` : ""}
+    </div>`;
+  }
+  return `<div class="pos" onclick="event.stopPropagation()">
+    <div class="pos-in"><label>평단 <input type="number" inputmode="decimal" step="0.01" data-k="avg" data-code="${key}" value="${avg || ""}" placeholder="$"></label>
+    <label>수량 <input type="number" inputmode="numeric" data-k="qty" data-code="${key}" value="${qty || ""}" placeholder="주"></label></div>${res}</div>`;
+}
+function renderOverseas() {
+  const ov = state.latest.overseas || {}, items = ov.items || [], fx = ov.fx;
+  const el = $("#overseasCards"); if (!el) return;
+  if (!items.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="ov-h">해외 보유 <span class="mut small">네이버 해외주식 · 미국 정규장 종가 기준${fx?.rate ? ` · 원/달러 ${fmt.n(fx.rate, 2)} (${fx.date})` : ""}</span></div>` + items.map(o => {
+    const ck = (ok, t) => `<div class="ck"><span class="ck-l">${t[0]}</span><span class="ck-v">${t[1]}</span><span class="badge ${ok == null ? "st-na" : ok ? "st-good" : "st-bad"}">${ok == null ? "–" : ok ? "위" : "아래"}</span></div>`;
+    return `<div class="card hold" id="ov-${o.symbol}">
+      <h3>${o.name}<small>${o.symbol} · ${o.exchange || ""}</small></h3>
+      <div class="price">${usd(o.close)} <span class="${fmt.cls(o.ret_1d)}" style="font-size:14px">${fmt.pct(o.ret_1d, 2)}</span></div>
+      <div class="sub">${o.note || ""} · ${o.asof} · 52주 고점 대비 ${fmt.pct(o.dd_52w)} · 저점 대비 ${fmt.pct(o.from_low52)} · 20일 ${fmt.pct(o.ret_20)} · 60일 ${fmt.pct(o.ret_60)}${o.after?.price ? ` · 시간외 ${usd(o.after.price)} (${fmt.pct(o.after.ret, 2)})` : ""}</div>
+      <div class="spark">${sparkline(o.prices)}</div>
+      ${posBlockUS(o, fx)}
+      <div class="checks"><div class="cg"><div class="cg-h">추세</div>
+        ${ck(o.ma50_gap == null ? null : o.ma50_gap > 0, ["50일선", fmt.pct(o.ma50_gap)])}
+        ${ck(o.ma200_gap == null ? null : o.ma200_gap > 0, ["200일선", fmt.pct(o.ma200_gap)])}
+        <div class="ck"><span class="ck-l">52주 범위</span><span class="ck-v">${usd(o.low52)} ~ ${usd(o.high52)}</span><span></span></div>
+      </div></div>
+      <a class="more" href="https://m.stock.naver.com/worldstock/stock/${o.code}/total" target="_blank" rel="noopener">네이버에서 보기 →</a>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".pos input").forEach(inp => inp.onchange = () => {
+    const all = loadPos(); const c = inp.dataset.code;
+    all[c] = Object.assign(all[c] || {}, { [inp.dataset.k]: inp.value });
+    savePos(all); renderOverseas();
+  });
+}
+
 // ---------- 섹터 ----------
 function renderSectors() {
   const rows = state.latest.sectors || [];
@@ -330,7 +377,7 @@ async function init() {
   $("#asof").textContent = `기준일 ${state.latest.asof} · ${state.latest.universe_size}종목 · 생성 ${state.latest.generated_at}`;
   const secs = [...new Set(state.universe.map(r => r.sector_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   $("#secSel").innerHTML += secs.map(s => `<option>${s}</option>`).join("");
-  renderMarket(); renderPresets(); renderWatch(); renderSectors(); renderAll();
+  renderMarket(); renderPresets(); renderWatch(); renderOverseas(); renderSectors(); renderAll();
   let t = "watch"; try { t = localStorage.getItem("tab") || t; } catch (e) { /* 무시 */ }
   switchTab(t);
 }

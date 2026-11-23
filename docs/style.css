@@ -295,3 +295,8 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 .sec-tip { position: absolute; z-index: 5; display: none; pointer-events: none; background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 6px 9px; font-size: 12.5px; box-shadow: var(--shadow); white-space: nowrap; }
 .sec-tip .mut { font-size: 11px; margin-top: 2px; }
+
+/* 해외 보유 */
+#overseasCards { margin-top: 14px; }
+.ov-h { grid-column: 1 / -1; font-weight: 600; margin: 4px 0 2px; }
+a.more { display: block; text-decoration: none; }

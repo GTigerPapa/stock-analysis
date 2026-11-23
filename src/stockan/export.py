@@ -13,6 +13,7 @@ from .db import read_df
 from .detail_export import export_details, export_series
 from .holdings import diff as holdings_diff, evaluate as holdings_eval
 from .indicators import sector_table
+from .overseas import export_block as overseas_block
 from .screener import run_all
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,14 @@ def _watch_with_checks(watch: list[dict], byc: dict, asof: str) -> list[dict]:
     return out
 
 
+def _overseas() -> dict:
+    try:
+        return overseas_block()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("해외 보유종목 export 실패: %s", e)
+        return {"fx": None, "items": []}
+
+
 def export_all(df: pd.DataFrame) -> None:
     asof = str(df["date"].max())
     presets = load_presets()
@@ -137,6 +146,7 @@ def export_all(df: pd.DataFrame) -> None:
             for p in presets
         ],
         "watchlist": _watch_with_checks(watch, byc, asof),
+        "overseas": _overseas(),
         "sectors": _records(sector_table(df), None or list(sector_table(df).columns)),
     }
     _dump("latest.json", latest)
