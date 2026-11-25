@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from . import dart, naver
+from . import daum, dart, naver
 from .config import BACKFILL_YEARS, INVESTOR_BACKFILL_DAYS, WORKERS
 from .db import log, read_df, session, upsert
 
@@ -89,11 +89,21 @@ def universe_codes(active_only: bool = True) -> list[str]:
     return df["code"].tolist()
 
 
-# ---------------- 일봉 (KRX 정규장, 네이버 차트 API 직접 호출 — 타임아웃 있음) ----------------
+# ---------------- 일봉 (KRX 정규장 공식가: 다음 금융 우선, 실패 시 네이버 차트) ----------------
+# 네이버 차트 일봉은 NXT 애프터마켓까지 합친 마지막 체결가라 KRX 공식 종가와 다를 수 있다 (daum.py 설명 참고).
+NXT_START = "2025-03-04"  # NXT 개장일 — 이 이후 네이버 일봉은 KRX 종가와 어긋날 수 있음
+
+
 def _fetch_prices(code: str, start: str) -> list[dict]:
-    rows = naver.daily_chart(code, start)
+    src = "daum"
+    old = start < (date.today() - timedelta(days=120)).isoformat()
+    rows = daum.daily(code, start, per_page=500 if old else 30)
+    if not rows:
+        src = "naver"
+        rows = naver.daily_chart(code, start)
     out, prev = [], None
     for r in rows:
+        pc = r.get("prev_close") or prev
         out.append(
             {
                 "code": code,
@@ -104,15 +114,18 @@ def _fetch_prices(code: str, start: str) -> list[dict]:
                 "low": r["low"],
                 "close": r["close"],
                 "volume": r["volume"],
-                "amount": r["close"] * r["volume"],  # 근사 거래대금
-                "change": (r["close"] / prev - 1) if prev else None,
+                "amount": r.get("amount") or r["close"] * r["volume"],  # 다음은 실제 거래대금, 네이버는 근사
+                "change": (r["close"] / pc - 1) if pc else None,
             }
         )
         prev = r["close"]
+    if src == "naver" and rows and rows[-1]["date"] >= NXT_START:
+        logger.debug("%s 일봉 네이버 대체(NXT 포함가일 수 있음)", code)
     return out
 
 
-def update_prices(codes: list[str] | None = None, full: bool = False) -> None:
+def update_prices(codes: list[str] | None = None, full: bool = False, repair_since: str | None = None) -> None:
+    """repair_since 를 주면 그 날짜부터 다시 받아 덮어쓴다 (예: NXT 포함가로 저장된 과거 일봉 교정)."""
     codes = codes or universe_codes()
     with session() as con:
         last = dict(con.execute("SELECT code, MAX(date) FROM prices WHERE venue='KRX' GROUP BY code"))
@@ -123,13 +136,15 @@ def update_prices(codes: list[str] | None = None, full: bool = False) -> None:
 
     def job(code):
         start = default_start if code not in last else last[code]
+        if repair_since and code in last:
+            start = min(start, repair_since)
         return _fetch_prices(code, start)
 
     n = 0
     with session() as con:
         for _, rows in _parallel(job, codes, "일봉", workers=min(WORKERS, 4)):
             n += upsert(con, "prices", rows)
-        log(con, "prices", "ok", f"{n} rows / {len(codes)} codes")
+        log(con, "prices", "ok", f"{n} rows / {len(codes)} codes" + (f" (repair since {repair_since})" if repair_since else ""))
 
 
 # ---------------- 투자자별 수급 ----------------

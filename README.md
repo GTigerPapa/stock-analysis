@@ -85,3 +85,8 @@ GitHub → Settings → Pages → Source: `Deploy from a branch`, Branch: `main`
 ## 해외 보유종목 (보유 탭)
 - `presets/overseas.json` 에 네이버 해외주식 코드(`NVDA.O` 나스닥, `.N` 뉴욕 등)를 넣으면 export 때 보유 탭 아래 '해외 보유' 카드로 표시됩니다. 키 불필요.
 - 평단은 달러로 입력하며 이 브라우저(localStorage)에만 저장됩니다. 원화 환산은 네이버 원/달러 전일 종가 기준.
+
+## 일봉 가격 출처 (2026-11-25 변경)
+- 일봉은 다음 금융의 KRX 정규장 공식가(시·고·저·종가·거래량·거래대금)를 우선 사용하고, 실패하면 네이버 차트로 대체합니다.
+- 네이버 차트 일봉은 NXT 애프터마켓(~20:00) 마지막 체결가라서 KRX 공식 종가(다음 날 기준가)와 다를 수 있습니다.
+- NXT 개장(2025-03-04) 이후 과거 일봉을 한 번에 교정하려면: `python -m stockan.run_daily --only prices,features,export --repair-prices`

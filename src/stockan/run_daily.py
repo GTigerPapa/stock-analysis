@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--only", help="쉼표 구분 단계 목록")
     ap.add_argument("--codes", help="쉼표 구분 종목코드(테스트용)")
     ap.add_argument("--top", type=int, help="시총 상위 N종목만(테스트용)")
+    ap.add_argument("--repair-prices", nargs="?", const="2025-03-04", metavar="YYYY-MM-DD",
+                    help="이 날짜(기본 NXT 개장일)부터 일봉을 KRX 공식가로 다시 받아 덮어쓰기")
     ap.add_argument("--budget", type=int, help="초 단위 시간 예산. 초과 시 남은 수집은 건너뛰고 종료코드 3 (재실행하면 이어서)")
     args = ap.parse_args(argv)
     setup_logging()
@@ -69,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             if step == "sectors":
                 collect.update_sectors()
             elif step == "prices":
-                collect.update_prices(codes, full=full)
+                collect.update_prices(codes, full=full, repair_since=args.repair_prices)
             elif step == "investor":
                 collect.update_investor(codes, full=full)
             elif step == "fundamentals":
