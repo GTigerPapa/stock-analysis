@@ -1,0 +1,21 @@
+{
+  "name": "린치 스크린",
+  "description": "피터 린치 기준: (이익 성장률 + 배당수익률) ÷ PER 이 1.5 이상인 저성장주·대형우량주·고성장주. 성장률은 최근 2년 EPS 연평균과 컨센서스 성장률 중 낮은 쪽(지표 계산에는 최대 30%까지만 인정), PER은 예상 EPS 기준. 매출이 연 5% 이상 늘고 있는 종목만 포함. 경기순환주·회생주·자산주는 PER로 판단하면 안 되므로 제외(종목 상세의 스토리 카드에서 따로 확인). '적정가 대비'는 PER=성장률일 때 가격과의 차이이며, 매수 구간은 적정가의 0.8·0.65·0.5배, 매도 구간은 1.2·1.5배. 숫자는 후보를 고르는 용도이고, 사업 내용과 스토리 확인은 직접 해야 함.",
+  "top_n": 40,
+  "filters": [
+    {"f": "amount_avg20", "op": ">=", "v": 3000000000},
+    {"f": "lynch_cat_n", "op": "in", "v": [1, 2, 3]},
+    {"f": "lynch_ratio", "op": ">=", "v": 1.5},
+    {"f": "lynch_rev_g", "op": ">=", "v": 5},
+    {"f": "lynch_bad", "op": "<=", "v": 1}
+  ],
+  "score": [
+    {"f": "lynch_ratio", "w": 0.40},
+    {"f": "roe", "w": 0.15},
+    {"f": "debt_ratio", "w": -0.15},
+    {"f": "inv_gap", "w": -0.10},
+    {"f": "insider_net_6m", "w": 0.10},
+    {"f": "smart_net_60_pct", "w": 0.10}
+  ],
+  "cols": ["rank", "name", "lynch_cat", "close", "lynch_g", "lynch_rev_g", "lynch_per", "lynch_ratio", "lynch_gap", "lynch_zone", "debt_ratio", "roe", "inv_gap", "insider_net_6m", "score"]
+}

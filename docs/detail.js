@@ -97,6 +97,8 @@
       <div class="sec"><h4>실적 <span class="seg mini" id="finSeg"><button data-v="fq" class="on">분기</button><button data-v="fa">연간</button></span>
         <span class="mut">억원 · 점선 = 컨센서스</span></h4><div id="finChart" class="svgbox"></div><div id="finTbl"></div></div>
 
+      <div class="sec"><h4>린치 스토리 카드 <span class="mut">숫자로 자동 작성한 초안 · 사업 내용과 경쟁력 판단은 직접 확인</span></h4><div id="lynch"></div></div>
+
       <div class="sec"><h4>수급 캘린더 <span class="mut">하루 1칸 · 색 = 순매수 ÷ 20일 평균 거래량</span></h4><div id="cal" class="svgbox"></div></div>
 
       <div class="sec"><h4>지분 구성 추이 <span class="seg mini" id="ownSeg"><button data-v="float" class="on">유통주식 기준</button><button data-v="all">전체 기준</button></span>
@@ -118,6 +120,7 @@
     $("#finSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
       $("#finSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawFin(d, b.dataset.v);
     });
+    drawLynch(d);
     drawCalendar(d);
     drawOwnership(d, "float");
     $("#ownSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
@@ -370,6 +373,40 @@
     let lastM = "";
     inv.forEach(r => { const m = r[0].slice(0, 7); if (m !== lastM && new Date(r[0]).getDate() <= 7) { lastM = m; s += `<text x="${40 + wk(r[0]) * (cell + gapW)}" y="8" class="ax">${m.slice(2).replace("-", ".")}</text>`; } });
     el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}</span><span>순매수</span><span class="lg">${[.5, 1].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}${[.5, 1].map(v => `<i style="background:${COL[2](v * .25)}"></i>`).join("")}</span><span class="mut">순매수 = 고유색 진하게(<span class="c-frgn">외국인</span>/<span class="c-inst">기관</span>) · 순매도 = 회색 진하게 · 평균 거래량의 ±25%에서 가장 진함</span></div>`;
+  }
+
+  // ---------- 린치 스토리 카드 ----------
+  function drawLynch(d) {
+    const el = $("#lynch"), L = d.lynch, close = d.f && d.f.close;
+    if (!el) return;
+    if (!L) { el.innerHTML = `<div class="mut small">린치 분석 데이터가 아직 없습니다 (다음 정기 실행 후 표시)</div>`; return; }
+    const ST = { good: ["양호", "st-good"], warn: ["주의", "st-warn"], bad: ["경고", "st-bad"], na: ["참고", "st-na"] };
+    const won = v => v == null ? "–" : Math.round(v).toLocaleString("ko-KR") + "원";
+    const pct = (v, n = 0) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(n) + "%";
+    const big = v => v == null ? "–" : Math.abs(v) >= 1e12 ? (v / 1e12).toFixed(1) + "조" : Math.round(v / 1e8).toLocaleString() + "억";
+    let z = "";
+    if (L.zones) {
+      const pts = [["매수 3차", L.zones.buy[2], "st-good"], ["매수 2차", L.zones.buy[1], "st-good"], ["매수 1차", L.zones.buy[0], "st-good"],
+        ["적정가", L.zones.fair, "st-na"], ["매도 1차", L.zones.sell[0], "st-bad"], ["매도 2차", L.zones.sell[1], "st-bad"]];
+      z = `<div class="ly-z">${pts.map(p => `<div><span class="badge ${p[2]}">${p[0]}</span><b>${won(p[1])}</b><small>${close ? pct((p[1] / close - 1) * 100) : ""}</small></div>`).join("")}</div>
+        <div class="mut small">현재가 ${won(close)} → <b>${esc(L.zone || "–")}</b> (적정가 대비 ${pct(L.gap)}). 적정가 = 예상 EPS × 이익 성장률(최대 ${L.g_cap}%). 컨센서스가 낡았거나 낙관적이면 적정가도 높게 나옵니다.${L.zone_note ? " " + esc(L.zone_note) : ""}</div>`;
+    } else {
+      z = `<div class="mut small">적정가 구간 없음 — 이익 성장률이 5% 미만·음수이거나 회생주라 PER 기준 가격을 계산하지 않습니다.</div>`;
+    }
+    const checks = (L.checks || []).map(c => `<div class="ck" title="${esc(c.desc)}"><span class="ck-l">${esc(c.label)}</span><span class="ck-v">${esc(c.text)}</span><span class="badge ${ST[c.status][1]}">${ST[c.status][0]}</span></div>`).join("");
+    const ins = (L.insiders || []).map(r => `<div class="small">${r.date.slice(2)} · ${esc(r.name)}${r.pos ? " (" + esc(r.pos) + ")" : ""} <span class="${r.chg > 0 ? "fl-up" : "fl-dn"}">${r.chg > 0 ? "+" : ""}${Math.round(r.chg).toLocaleString()}주</span></div>`).join("");
+    const bb = (L.buybacks || []).map(r => `<div class="small">${(r.date || "").slice(2)} · ${big(r.amount)}원 · ${esc(r.purpose || "")}</div>`).join("");
+    el.innerHTML = `
+      <div class="ly-top"><span class="badge st-na ly-cat">${esc(L.cat)}</span>
+        <span>이익 성장 <b>${pct(L.g)}</b>/년${L.g_hist != null && L.g_fwd != null ? ` <small class="mut">(과거 ${pct(L.g_hist)}, 컨센서스 ${pct(L.g_fwd)} 중 낮은 쪽)</small>` : ""}</span>
+        <span>매출 성장 <b>${pct(L.rev_g)}</b>/년</span><span>예상 PER <b>${L.per ?? "–"}</b></span><span>배당 <b>${L.div ?? 0}%</b></span>
+        <span>린치 지표 <b>${L.ratio ?? "–"}</b></span></div>
+      ${L.eps ? `<div class="small mut">EPS: ${esc(L.eps)}</div>` : ""}
+      <div class="ly-story"><div><b>2분 설명</b> ${esc(L.why)}</div><div><b>잘 되려면</b> ${esc(L.need)}</div><div><b>팔 때</b> ${esc(L.sell)}</div></div>
+      ${z}
+      <div class="checks"><div class="cg"><div class="cg-h">점검 항목${L.fin_asof ? ` <span class="mut">DART ${esc(L.fin_asof)} 반영</span>` : ` <span class="mut">DART 재고·현금 데이터 없음(수집 대상 아님 또는 수집 전)</span>`}</div>${checks || `<div class="mut small">점검할 수 있는 항목이 없습니다</div>`}</div></div>
+      ${ins ? `<details><summary>임원·주요주주 지분 변동 (최근 ${L.insiders.length}건)</summary>${ins}</details>` : ""}
+      ${bb ? `<details><summary>자사주 취득 결정 (최근 ${L.buybacks.length}건)</summary>${bb}</details>` : ""}`;
   }
 
   // ---------- 지분 구성 추이 (100% 누적 영역) ----------

@@ -50,11 +50,23 @@ const COLS = {
   ma200_chg_21: { h: "200일선1M", f: r => fmt.pct(r.ma200_chg_21, 2), c: r => fmt.cls(r.ma200_chg_21), tip: "200일 이동평균의 최근 1개월 변화율(상승 중이어야 함)" },
   atr14_pct: { h: "ATR%", f: r => fmt.n(r.atr14_pct, 1) + "%", tip: "14일 평균 변동폭 ÷ 종가. 낮을수록 변동성이 수축된 상태" },
   stop_atr2_pct: { h: "손절폭", f: r => r.stop_atr2_pct == null ? "–" : "−" + r.stop_atr2_pct.toFixed(1) + "%", tip: "ATR 2배, 최대 10%. 매수가 대비 손절 참고 폭" },
+  roe: { h: "ROE", f: r => fmt.n(r.roe, 1) },
+  debt_ratio: { h: "부채비율", f: r => r.debt_ratio == null ? "–" : fmt.n(r.debt_ratio, 0) + "%" },
+  lynch_cat: { h: "린치 분류", f: r => r.lynch_cat || "–", str: true, tip: "피터 린치의 6분류(자동). 저성장주·대형우량주·고성장주·경기순환주·회생주·자산주" },
+  lynch_g: { h: "이익성장", f: r => fmt.pct(r.lynch_g, 0), c: r => fmt.cls(r.lynch_g), tip: "EPS 연 성장률: 최근 2년 연평균과 컨센서스 성장률 중 낮은 쪽" },
+  lynch_rev_g: { h: "매출성장", f: r => fmt.pct(r.lynch_rev_g, 0), c: r => fmt.cls(r.lynch_rev_g), tip: "연간 매출 연평균 성장률(실적치)" },
+  lynch_per: { h: "예상PER", f: r => fmt.n(r.lynch_per, 1), tip: "종가 ÷ 예상 EPS(컨센서스, 없으면 최근 연간 EPS)" },
+  lynch_peg: { h: "PEG", f: r => fmt.n(r.lynch_peg, 2), tip: "예상 PER ÷ 이익 성장률(최대 30% 인정). 1 = 적정, 0.5 이하 = 쌈" },
+  lynch_ratio: { h: "린치지표", f: r => r.lynch_ratio == null ? "–" : `<b>${r.lynch_ratio.toFixed(2)}</b>`, tip: "(이익 성장률 + 배당수익률) ÷ PER. 2 이상 매력, 1.5 양호, 1 미만 부족" },
+  lynch_gap: { h: "적정가 대비", f: r => fmt.pct(r.lynch_gap, 0), c: r => r.lynch_gap == null ? "mut" : r.lynch_gap < 0 ? "fl-up" : "fl-dn", tip: "적정가(예상 EPS × 성장률) 대비 현재가. 음수 = 적정가보다 쌈" },
+  lynch_zone: { h: "구간", f: r => r.lynch_zone ? `<span class="badge ${r.lynch_zone_n > 0 ? "st-good" : r.lynch_zone_n < 0 ? "st-bad" : "st-na"}">${r.lynch_zone}</span>` : "–", sortKey: "lynch_zone_n", tip: "매수 1·2·3차 = 적정가의 0.8·0.65·0.5배 이하, 매도 1·2차 = 1.2·1.5배 이상" },
+  inv_gap: { h: "재고−매출", f: r => r.inv_gap == null ? "–" : fmt.pct(r.inv_gap, 0), c: r => r.inv_gap == null ? "mut" : r.inv_gap > 10 ? "fl-dn" : "", tip: "재고 증가율 − 매출 증가율(%p, DART 최근 보고서의 전년 같은 시점 대비). 양수가 크면 경고" },
+  insider_net_6m: { h: "내부자6M", f: r => r.insider_net_6m == null ? "–" : fmt.pct(r.insider_net_6m, 2), c: r => flcls(r.insider_net_6m), tip: "임원·주요주주 보유주식 6개월 순증감 ÷ 발행주식수 (DART). 상여·행사 포함" },
   score: { h: "점수", f: r => `<span class="score">${fmt.n(r.score, 1)}</span>` },
   rank: { h: "#", f: r => `<span class="rank">${r.rank}</span>`, cls: "l" },
 };
 const SCREEN_COLS = ["rank", "name", "close", "ret_1d", "ret_60", "ret_120", "slope_120", "r2_120", "dd_52w", "smart_net_60_pct", "excess_60", "per", "score"];
-const ALL_COLS = ["name", "close", "ret_1d", "ret_20", "ret_60", "ret_120", "ret_250", "slope_120", "r2_120", "dd_52w", "close_vs_ma200", "smart_net_60_pct", "frgn_net_60_pct", "excess_60", "sector_rs_60", "per", "pbr", "op_qoq", "vol_ratio20", "amount_avg20", "marcap", "nxt_gap"];
+const ALL_COLS = ["name", "close", "ret_1d", "ret_20", "ret_60", "ret_120", "ret_250", "slope_120", "r2_120", "dd_52w", "close_vs_ma200", "smart_net_60_pct", "frgn_net_60_pct", "excess_60", "sector_rs_60", "per", "pbr", "op_qoq", "lynch_cat", "lynch_ratio", "vol_ratio20", "amount_avg20", "marcap", "nxt_gap"];
 
 function renderTable(el, rows, cols, key) {
   const srt = state.sort[key];

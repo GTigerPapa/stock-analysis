@@ -233,6 +233,8 @@ def build_features() -> pd.DataFrame:
     for w in (20, 60, 120, 250):
         df[f"ret_{w}_pct_rank"] = df[f"ret_{w}"].rank(pct=True) * 100
     df = add_trend_template(df)
+    from .lynch import add_lynch  # 순환 import 방지
+    df = add_lynch(df)
     # 저장
     with session() as con:
         upsert(

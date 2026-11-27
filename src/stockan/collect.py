@@ -353,3 +353,70 @@ def update_ownership(codes: list[str] | None = None) -> None:
         log(con, "ownership", "fail" if stop["err"] else "ok", f"{n} rows {stop['err'] or ''}")
     if stop["err"]:
         raise stop["err"]
+
+
+# ---------------- 린치 점검용 DART 데이터 (재고·현금·영업현금흐름 / 임원 지분 / 자사주) ----------------
+LYNCH_SINCE_YEAR = 2025
+
+
+def lynch_pool() -> list[str]:
+    """수집 대상: 20일 평균 거래대금 30억 이상 종목 + 보유(watchlist). 전 종목은 DART 일일 한도(2만 건)에 비해 과함."""
+    from .config import load_watchlist
+
+    try:
+        df = read_df("SELECT code FROM features WHERE date=(SELECT MAX(date) FROM features) AND json_extract(payload,'$.amount_avg20')>=3e9")
+        pool = df["code"].tolist()
+    except Exception:  # noqa: BLE001
+        pool = universe_codes()[:500]
+    return sorted(set(pool) | {w["code"] for w in load_watchlist()})
+
+
+def update_lynch_data(codes: list[str] | None = None) -> None:
+    """2025년 보고서부터 재무 보조지표를 받고, 임원·주요주주 지분 변동과 자사주 취득 결정을 갱신한다.
+
+    이미 받은 (종목, 연도, 보고서)는 다시 받지 않는다. 첫 실행은 종목당 최대 9~16회 호출(약 480종목 → 10~20분).
+    """
+    if not dart.api_key():
+        logger.info("린치: DART_API_KEY 없음 — 건너뜀")
+        return
+    codes = codes or lynch_pool()
+    with session() as con:
+        cmap = dict(con.execute("SELECT code, corp_code FROM dart_corp"))
+        have = {(c, y, r) for c, y, r in con.execute("SELECT code, year, reprt FROM dart_fin")}
+    if not cmap:
+        cmap = dart.corp_codes()
+    periods = dart.due_periods(LYNCH_SINCE_YEAR)
+    since = f"{LYNCH_SINCE_YEAR}-01-01"
+    targets = [c for c in codes if c in cmap]
+    stop = {"err": None}
+
+    def job(code):
+        out = {"fin": [], "ins": [], "bb": []}
+        if stop["err"]:
+            return out
+        try:
+            cc = cmap[code]
+            for y, rc, age in periods:
+                if (code, y, rc) in have:
+                    continue
+                s = dart.fin_summary(cc, y, rc)
+                if s:
+                    out["fin"].append({"code": code, "year": y, "reprt": rc, **s})
+                elif age > 45:  # 기한이 한참 지났는데도 없으면(결산월 다름·미제출) 다시 묻지 않게 표시
+                    out["fin"].append({"code": code, "year": y, "reprt": rc, "fs_div": "NONE", "rcept_no": None,
+                                       "inventory": None, "cash": None, "cfo": None, "revenue": None})
+            out["ins"] = dart.insider_rows(code, cc, since)
+            out["bb"] = dart.buyback_rows(code, cc, since)
+        except dart.DartError as e:
+            stop["err"] = e
+        return out
+
+    n = {"fin": 0, "ins": 0, "bb": 0}
+    with session() as con:
+        for _, r in _parallel(job, targets, "린치", workers=min(WORKERS, 4)):
+            n["fin"] += upsert(con, "dart_fin", r["fin"])
+            n["ins"] += upsert(con, "insider", r["ins"])
+            n["bb"] += upsert(con, "buyback", r["bb"])
+        log(con, "lynch", "fail" if stop["err"] else "ok", f"fin {n['fin']} / insider {n['ins']} / buyback {n['bb']} rows, {len(targets)} codes {stop['err'] or ''}")
+    if stop["err"]:
+        raise stop["err"]

@@ -91,6 +91,21 @@ def export_details(df: pd.DataFrame) -> int:
             rows.setdefault(r.period, {"period": r.period, "consensus": bool(r.is_consensus)})[r.item] = _r(r.value)
         return [rows[k] for k in sorted(rows)]
 
+    try:
+        from . import lynch
+        lctx = lynch.Ctx()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("린치 카드 건너뜀: %s", e)
+        lynch, lctx = None, None
+
+    def lynch_card(rec):
+        if lctx is None:
+            return None
+        try:
+            return lynch.analyze(rec, lctx)[1]
+        except Exception:  # noqa: BLE001
+            return None
+
     n = 0
     sd = DOCS_DATA / "stock"
     for rec in df.replace({np.nan: None}).to_dict("records"):
@@ -113,6 +128,7 @@ def export_details(df: pd.DataFrame) -> int:
             "mo": [] if code not in mg else [[r.ym, _r(r.close, 0)] for r in mg[code].itertuples()],
             "y0": [] if code not in yg else [[r.y, r.d0, _r(r.c0, 0)] for r in yg[code].itertuples()],
             "own": own_block(code, i),
+            "lynch": lynch_card(rec),
             "fq": fin_rows(fg.get(code), "quarter"),
             "fa": fin_rows(fg.get(code), "annual"),
         }

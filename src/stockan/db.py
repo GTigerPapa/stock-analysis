@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS ownership (
 CREATE TABLE IF NOT EXISTS dart_corp (
     code TEXT PRIMARY KEY, corp_code TEXT, updated_at TEXT
 );
+-- 린치 점검용 DART 데이터 (2025년 보고서부터). reprt: 11013 1분기 / 11012 반기 / 11014 3분기 / 11011 사업보고서
+CREATE TABLE IF NOT EXISTS dart_fin (
+    code TEXT, year INTEGER, reprt TEXT, fs_div TEXT, rcept_no TEXT,
+    inventory REAL, cash REAL, cfo REAL, revenue REAL,
+    PRIMARY KEY (code, year, reprt)
+);
+CREATE TABLE IF NOT EXISTS insider (
+    code TEXT, rcept_no TEXT, date TEXT, name TEXT, position TEXT, shares_after REAL, shares_chg REAL,
+    PRIMARY KEY (code, rcept_no)
+);
+CREATE TABLE IF NOT EXISTS buyback (
+    code TEXT, rcept_no TEXT, date TEXT, shares REAL, amount REAL, purpose TEXT,
+    PRIMARY KEY (code, rcept_no)
+);
 CREATE TABLE IF NOT EXISTS run_log (
     run_at TEXT, step TEXT, status TEXT, detail TEXT
 );

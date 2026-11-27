@@ -146,3 +146,98 @@ def holder_series(rows: list[dict]) -> dict:
         name = max(others, key=lambda h: others[h][-1]["pct"])
         out["mj"] = {"n": name, **_steps(others[name])}
     return out
+
+
+# ---------------- 린치 점검용: 재고·현금·영업현금흐름 / 임원·주요주주 지분 / 자사주 취득 ----------------
+# 보고서 코드 → (분기 순서, 제출 마감 월·일). 사업보고서(11011)는 다음 해 3월 말 제출.
+REPRT_ORDER = {"11013": 1, "11012": 2, "11014": 3, "11011": 4}
+_REPRT_DUE = {"11013": (0, 5, 16), "11012": (0, 8, 15), "11014": (0, 11, 15), "11011": (1, 4, 1)}
+
+
+def due_periods(since_year: int = 2025, today=None) -> list[tuple[int, str, int]]:
+    """제출 기한이 지난 (사업연도, 보고서코드, 기한 경과 일수) 목록. 12월 결산 기준."""
+    import datetime as _dt
+
+    today = today or _dt.date.today()
+    out = []
+    for y in range(since_year, today.year + 1):
+        for rc, (dy, m, d) in _REPRT_DUE.items():
+            due = _dt.date(y + dy, m, d)
+            if due <= today:
+                out.append((y, rc, (today - due).days))
+    return out
+
+
+def _acct(rows: list[dict], sj: tuple[str, ...], ids: tuple[str, ...], names: tuple[str, ...], cum: bool = False) -> float | None:
+    """재무제표 행에서 계정 하나 찾기: 표준 계정 ID 우선, 없으면 계정명 일치."""
+    def val(r):
+        v = _num(r.get("thstrm_add_amount")) if cum else None
+        return v if v is not None else _num(r.get("thstrm_amount"))
+
+    cand = [r for r in rows if r.get("sj_div") in sj]
+    for r in cand:
+        if r.get("account_id") in ids and val(r) is not None:
+            return val(r)
+    for r in cand:
+        if (r.get("account_nm") or "").replace(" ", "") in names and val(r) is not None:
+            return val(r)
+    return None
+
+
+def fin_summary(corp_code: str, year: int, reprt: str) -> dict | None:
+    """단일회사 전체 재무제표 → 재고자산·현금성자산·영업활동현금흐름(누적)·매출(누적). 연결 우선, 없으면 별도."""
+    for fs in ("CFS", "OFS"):
+        rows = get("fnlttSinglAcntAll", {"corp_code": corp_code, "bsns_year": str(year), "reprt_code": reprt, "fs_div": fs})
+        if not rows:
+            continue
+        return {
+            "fs_div": fs,
+            "rcept_no": rows[0].get("rcept_no"),
+            "inventory": _acct(rows, ("BS",), ("ifrs-full_Inventories",), ("재고자산",)),
+            "cash": _acct(rows, ("BS",), ("ifrs-full_CashAndCashEquivalents",), ("현금및현금성자산",)),
+            "cfo": _acct(rows, ("CF",), ("ifrs-full_CashFlowsFromUsedInOperatingActivities",),
+                         ("영업활동현금흐름", "영업활동으로인한현금흐름", "영업활동순현금흐름")),
+            "revenue": _acct(rows, ("IS", "CIS"), ("ifrs-full_Revenue",), ("매출액", "수익(매출액)", "영업수익", "매출"), cum=True),
+        }
+    return None
+
+
+def insider_rows(code: str, corp_code: str, since: str = "2025-01-01") -> list[dict]:
+    """임원ㆍ주요주주 특정증권등 소유상황보고. 증감에는 장내매수 외 상여·행사·상속 등도 포함된다."""
+    out = []
+    for r in get("elestock", {"corp_code": corp_code}):
+        d = (r.get("rcept_dt") or "").strip()
+        if len(d) != 10 or d < since:
+            continue
+        out.append({
+            "code": code, "rcept_no": r.get("rcept_no"), "date": d,
+            "name": (r.get("repror") or "").strip(),
+            "position": next((v for v in ((r.get("isu_exctv_ofcps") or "").strip(), (r.get("isu_main_shrholdr") or "").strip()) if v and v != "-"), ""),
+            "shares_after": _num(r.get("sp_stock_lmp_cnt")),
+            "shares_chg": _num(r.get("sp_stock_lmp_irds_cnt")),
+        })
+    return out
+
+
+def _kdate(s: str | None) -> str | None:
+    import re as _re
+
+    m = _re.match(r"\s*(\d{4})\D+(\d{1,2})\D+(\d{1,2})", s or "")
+    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else None
+
+
+def buyback_rows(code: str, corp_code: str, since: str = "2025-01-01") -> list[dict]:
+    """자기주식 취득 결정(주요사항보고서)."""
+    import datetime as _dt
+
+    out = []
+    for r in get("tsstkAqDecsn", {"corp_code": corp_code, "bgn_de": since.replace("-", ""), "end_de": _dt.date.today().strftime("%Y%m%d")}):
+        rno = r.get("rcept_no") or ""
+        out.append({
+            "code": code, "rcept_no": rno,
+            "date": _kdate(r.get("aq_dd")) or (f"{rno[:4]}-{rno[4:6]}-{rno[6:8]}" if len(rno) >= 8 else None),
+            "shares": (_num(r.get("aqpln_stk_ostk")) or 0) + (_num(r.get("aqpln_stk_estk")) or 0),
+            "amount": (_num(r.get("aqpln_prc_ostk")) or 0) + (_num(r.get("aqpln_prc_estk")) or 0),
+            "purpose": (r.get("aq_pp") or "").strip(),
+        })
+    return out

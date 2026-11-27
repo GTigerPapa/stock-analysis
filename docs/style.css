@@ -300,3 +300,12 @@ details.sec summary { font-size: 13px; color: var(--muted); font-weight: 600; cu
 #overseasCards { margin-top: 14px; }
 .ov-h { grid-column: 1 / -1; font-weight: 600; margin: 4px 0 2px; }
 a.more { display: block; text-decoration: none; }
+
+/* 린치 스토리 카드 */
+.ly-top { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+.ly-cat { font-size: 13px; padding: 3px 9px; }
+.ly-story { margin: 8px 0; font-size: 13px; line-height: 1.55; display: grid; gap: 4px; }
+.ly-story b { display: inline-block; min-width: 62px; color: var(--accent); font-weight: 600; }
+.ly-z { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin: 8px 0 4px; }
+.ly-z > div { display: grid; gap: 2px; justify-items: start; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.ly-z small { color: var(--muted); }
