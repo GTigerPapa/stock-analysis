@@ -42,6 +42,13 @@
   </section>
 
   <section id="tab-map" class="tab">
+    <div class="panel">
+      <div class="panel-h">린치 지도 <span class="mut">— 가로 = 린치 지표, 세로 = 적정가 대비. 오른쪽 아래일수록 성장에 비해 쌈. 점을 누르면 상세</span>
+        <label class="chk" style="float:right"><input type="checkbox" id="lmLiquid" checked> 거래대금 10억↑</label></div>
+      <div id="lynchMap" class="mapbox"></div>
+      <div class="legend m-legend" id="lynchLegend"></div>
+      <div id="lynchList"></div>
+    </div>
     <div class="toolbar" id="mapControls"></div>
     <div class="panel">
       <div class="panel-h">거래량 × 가격 지도 <span class="mut">— 오른쪽으로 튀어나온 점이 평소와 다르게 거래된 종목. 점을 누르면 상세</span></div>
@@ -91,6 +98,7 @@
 <script src="map.js"></script>
 <script src="detail.js"></script>
 <script src="sector.js"></script>
+<script src="lynchmap.js"></script>
 <script src="nav.js"></script>
 </body>
 </html>
