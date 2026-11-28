@@ -111,6 +111,14 @@
       <details class="sec"><summary>전체 지표 보기</summary>${featureGrid(f)}</details>`;
 
     bindBack();
+    // 린치 요약·카드는 차트보다 먼저 그린다 (차트 오류가 나도 맨 위 요약은 보이도록)
+    try {
+      drawLynch(d);
+      drawLynchTop(d, 250);
+      $("#lyhSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+        $("#lyhSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawLynchTop(d, +b.dataset.v);
+      });
+    } catch (e) { console.error("린치 요약", e); }
     drawMain(d, st);
     drawVolumeProfile(d);
     drawRS(d, 250);
@@ -121,11 +129,6 @@
     drawFin(d, "fq");
     $("#finSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
       $("#finSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawFin(d, b.dataset.v);
-    });
-    drawLynch(d);
-    drawLynchTop(d, 250);
-    $("#lyhSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
-      $("#lyhSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawLynchTop(d, +b.dataset.v);
     });
     drawCalendar(d);
     drawOwnership(d, "float");
@@ -148,7 +151,7 @@
     };
   }
   function drawMain(d, st) {
-    charts.forEach(c => c.remove()); charts = [];
+    charts.forEach(c => { try { c.remove(); } catch (e) { /* 이미 정리됨 */ } }); charts = []; rsChart = null;
     const dates = d.d.map(r => r[0]), close = d.d.map(r => r[4]), vol = d.d.map(r => r[5]);
     const N = dates.length;
     // 가격
