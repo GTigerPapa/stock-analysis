@@ -347,3 +347,4 @@ a.more { display: block; text-decoration: none; }
 .lm-lg.on { border-color: var(--text); font-weight: 700; }
 .lm-lg.off { opacity: .4; }
 .lm-lg.lm-all { border-color: var(--line); color: var(--accent); }
+.ly-over { fill: var(--text); font-weight: 600; }

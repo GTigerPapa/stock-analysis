@@ -453,7 +453,7 @@
       let gaps = "", gs = null;
       const flush = (i) => { if (gs == null) return; const xa = X(hs[gs][0]), xb = i < hs.length ? X(hs[i][0]) : W - R;
         gaps += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(2, xb - xa).toFixed(1)}" height="${h}" class="ly-na"/>`;
-        if (xb - xa > 120) gaps += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${y0 + h / 2 + 4}" class="ly-ax" text-anchor="middle">계산 불가 · 순이익과 영업이익 모두 감소 또는 적자</text>`; gs = null; };
+        if (xb - xa > 120) gaps += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${y0 + h / 2 + 4}" class="ly-ax" text-anchor="middle">계산 불가 · 이익·영업이익 성장률이 5% 미만이거나 감소·적자</text>`; gs = null; };
       const none = r => r[idx] == null && (alt == null || r[alt] == null);
       hs.forEach((r, i) => { if (none(r)) { if (gs == null) gs = i; } else flush(i); }); flush(hs.length);
       g = gaps + g;
@@ -467,6 +467,11 @@
         g += lv.filter(r => r[idx] == null && r[alt] != null).map(r => `<circle cx="${X(r[0]).toFixed(1)}" cy="${Y(r[alt]).toFixed(1)}" r="3.2" class="ly-live-op"><title>${r[0]} ${fmtv(r[alt])} (본업 기준 대체값)</title></circle>`).join("");
       }
       g += lv.filter(r => r[idx] != null).map(r => `<circle cx="${X(r[0]).toFixed(1)}" cy="${Y(r[idx]).toFixed(1)}" r="3" class="ly-live"><title>${r[0]} ${fmtv(r[idx])} (현재 방식)</title></circle>`).join("");
+      // 축 범위를 벗어난 구간: 가장자리에 붙여 그리고 실제 최대·최소값을 글자로 표시
+      const val = r => r[idx] ?? (alt != null ? r[alt] : null);
+      const over = hs.filter(r => val(r) != null && val(r) > mx), under = hs.filter(r => val(r) != null && val(r) < mn);
+      if (over.length) { const t = over.reduce((a, b) => val(b) > val(a) ? b : a); g += `<text x="${Math.min(W - R - 4, X(t[0]) + 4).toFixed(1)}" y="${y0 + 10}" class="ly-ax ly-over">↑ 범위 밖 최대 ${fmtv(val(t))} (${t[0].slice(2, 7)})</text>`; }
+      if (under.length) { const t = under.reduce((a, b) => val(b) < val(a) ? b : a); g += `<text x="${Math.min(W - R - 4, X(t[0]) + 4).toFixed(1)}" y="${y0 + h - 2}" class="ly-ax ly-over">↓ 범위 밖 최소 ${fmtv(val(t))} (${t[0].slice(2, 7)})</text>`; }
       return g;
     };
     // 분류 띠
@@ -482,7 +487,7 @@
       <text x="2" y="52" class="ly-ax">린치 지표</text>${panel(44, 88, hs.map(r => r[2]), -1.5, 5, [0, 1, 1.5, 2], v => v.toFixed(1), 2, "var(--accent)", 1)}
       <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, [...hs.map(r => r[3] ?? r[4]), ...lv.map(r => r[3] ?? r[4])], -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)", 0, 4)}
       ${tx}</svg>
-      <div class="mut small">과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 점선·빈 원 = EPS 기준이 안 되는 구간에 영업이익으로 계산한 '본업 기준' 대체값. 회색 구간은 영업이익도 줄었거나 적자라 둘 다 계산할 수 없는 기간입니다.</div>`;
+      <div class="mut small">${(d.lyh && d.lyh.basis) === "q" ? "과거 추이는 그 시점까지 공시된 DART 분기 보고서로 계산(최근 4개 분기 합계 실적, 2년 전 대비 연평균 성장률)" : "과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)"}해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 점선·빈 원 = EPS 기준이 안 되는 구간에 영업이익으로 계산한 '본업 기준' 대체값. 회색 구간은 영업이익도 줄었거나 적자라 둘 다 계산할 수 없는 기간입니다.</div>`;
   }
 
   // ---------- 린치 스토리 카드 ----------

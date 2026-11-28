@@ -122,7 +122,11 @@ def export_details(df: pd.DataFrame) -> int:
             h = [[r[0], r[1], _r(r[2]), _r(r[3], 1), _r(r[4], 1)] for r in h]
         except Exception:  # noqa: BLE001
             h = []
-        return {"h": h, "live": live_g.get(code, [])}
+        try:
+            basis = "q" if len(lynch._ttm_quarters(dis_g.get(code), lctx.shares.get(code))) >= 5 else "a"
+        except Exception:  # noqa: BLE001
+            basis = "a"
+        return {"h": h, "live": live_g.get(code, []), "basis": basis}
 
     def lynch_card(rec):
         if lctx is None:
