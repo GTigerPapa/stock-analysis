@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS dart_fin (
     inventory REAL, cash REAL, cfo REAL, revenue REAL,
     PRIMARY KEY (code, year, reprt)
 );
+-- DART 손익(연초부터 누적, 원) — 2022년 보고서부터. 분기별 최근 12개월 실적 계산용
+CREATE TABLE IF NOT EXISTS dart_is (
+    code TEXT, year INTEGER, reprt TEXT, fs_div TEXT, rev REAL, op REAL, ni REAL, ni_own REAL,
+    PRIMARY KEY (code, year, reprt)
+);
 CREATE TABLE IF NOT EXISTS insider (
     code TEXT, rcept_no TEXT, date TEXT, name TEXT, position TEXT, shares_after REAL, shares_chg REAL,
     PRIMARY KEY (code, rcept_no)

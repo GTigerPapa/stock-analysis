@@ -195,7 +195,120 @@ def _avail(period: str) -> str:
     return (end + timedelta(days=90)).isoformat()
 
 
-def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5, shares: float | None = None) -> list[list]:
+def _ttm_quarters(dis: pd.DataFrame | None, shares: float | None) -> list[tuple]:
+    """DART 누적 손익 → 분기별 (공시일, 최근12개월 EPS, 매출, 영업이익). 금액 단위: EPS 원, 매출·영업이익 억원."""
+    from .dart import REPRT_ORDER, _REPRT_DUE
+    if dis is None or dis.empty or not shares:
+        return []
+    d = dis[dis.fs_div != "NONE"].copy()
+    if d.empty:
+        return []
+    d["q"] = d.reprt.map(REPRT_ORDER)
+    cum = {(int(r.year), int(r.q)): r for r in d.itertuples()}
+    single = {}
+    for (y, q), r in cum.items():
+        prev = cum.get((y, q - 1)) if q > 1 else None
+        if q > 1 and prev is None:
+            continue
+        vals = []
+        for col in ("ni_own", "rev", "op"):
+            v = getattr(r, col)
+            if col == "ni_own" and (v is None or pd.isna(v)):
+                v = r.ni  # 별도재무제표는 지배주주 구분이 없음
+            pv = None
+            if prev is not None:
+                pv = getattr(prev, col)
+                if col == "ni_own" and (pv is None or pd.isna(pv)):
+                    pv = prev.ni
+            ok = v is not None and not pd.isna(v) and (q == 1 or (pv is not None and not pd.isna(pv)))
+            vals.append(float(v) - (float(pv) if q > 1 else 0.0) if ok else None)
+        dy, m, dd = _REPRT_DUE[{1: "11013", 2: "11012", 3: "11014", 4: "11011"}[q]]
+        single[(y, q)] = (date(y + dy, m, dd).isoformat(), *vals)
+    keys = sorted(single)
+    out = []
+    for i, (y, q) in enumerate(keys):
+        want = [(y - (1 if q - j <= 0 else 0), (q - j - 1) % 4 + 1) for j in range(4)]
+        if not all(k in single for k in want):
+            continue
+        parts = [single[k] for k in want]
+        sums = []
+        for idx in (1, 2, 3):
+            xs = [p[idx] for p in parts]
+            sums.append(sum(xs) if all(x is not None for x in xs) else None)
+        ni, rev, op = sums
+        out.append(((y, q), single[(y, q)][0], ni / shares if ni is not None else None,
+                    rev / 1e8 if rev is not None else None, op / 1e8 if op is not None else None))
+    return out
+
+
+def history_q(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, ttm: list[tuple], shares: float, step: int = 5) -> list[list]:
+    """분기별 최근 12개월 실적 기준 과거 추이 (DART). 그 날짜까지 공시된 분기 보고서만 사용."""
+    idx = {t[0]: i for i, t in enumerate(ttm)}
+    avail = [t[1] for t in ttm]
+    order = sorted(range(len(ttm)), key=lambda i: avail[i])
+    av_sorted = [avail[i] for i in order]
+    a = fin[(fin.period_type == "annual") & (fin.is_consensus == 0) & fin.item.isin(["BPS", "주당배당금"])] if fin is not None else None
+    bps_y, dps_y = {}, {}
+    if a is not None and not a.empty:
+        for r in a.itertuples():
+            (bps_y if r.item == "BPS" else dps_y)[_avail(str(r.period))] = _f(r.value)
+    bd, dd_ = sorted(bps_y), sorted(dps_y)
+    p2 = px[px.date >= av_sorted[0]] if av_sorted else px.iloc[0:0]
+    sel = list(range(len(p2) - 1, -1, -step))[::-1]
+    out = []
+
+    def back(yq, n):
+        y, q = yq
+        return idx.get((y - n // 4 - (1 if q - n % 4 <= 0 else 0), (q - n % 4 - 1) % 4 + 1))
+
+    def cg(x0, x1, yrs):
+        return ((x1 / x0) ** (1 / yrs) - 1) * 100 if (x0 and x1 and x0 > 0 and x1 > 0) else None
+
+    for j in sel:
+        d, close = p2.date.iloc[j], _f(p2.close.iloc[j])
+        k = int(np.searchsorted(av_sorted, d, side="right")) - 1
+        if k < 0 or not close:
+            continue
+        cur = ttm[order[k]]
+        i8, i4 = back(cur[0], 8), back(cur[0], 4)
+        base, yrs = (ttm[i8], 2) if i8 is not None else ((ttm[i4], 1) if i4 is not None else (None, None))
+        if base is None:
+            continue
+        e, r, o = cur[2], cur[3], cur[4]
+        g = cg(base[2], e, yrs)
+        if g is None and base[2] and base[2] > 0 and e is not None and e <= 0:
+            g = -100.0
+        rev_g = cg(base[3], r, yrs)
+        turn = bool(e and e > 0 and i4 is not None and ttm[i4][2] is not None and ttm[i4][2] <= 0)
+        eps_base = e if (e and e > 0) else None
+        kb = int(np.searchsorted(bd, d, side="right")) - 1
+        pbr = close / bps_y[bd[kb]] if kb >= 0 and bps_y[bd[kb]] else None
+        kd = int(np.searchsorted(dd_, d, side="right")) - 1
+        div = (dps_y[dd_[kd]] or 0) / close * 100 if kd >= 0 else 0.0
+        cat = classify(g, rev_g, eps_base, pbr, sector, turn)
+        ratio, gap = price_metrics(close, eps_base, g, div, cat)
+        gap_op = None
+        if gap is None and cat != 5:
+            gap_op = op_fallback(base[4], o, yrs, shares, close, div)[3]
+        out.append([d, cat, ratio, gap, gap_op])
+    return out
+
+
+def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5, shares: float | None = None,
+            dis: pd.DataFrame | None = None) -> list[list]:
+    """과거 추이. DART 분기 손익이 있으면 분기별 최근 12개월 실적 기준(history_q), 없으면 연간 실적 기준."""
+    ttm = _ttm_quarters(dis, shares)
+    if len(ttm) >= 5:
+        try:
+            h = history_q(px, fin, sector, ttm, shares, step)
+            if h:
+                return h
+        except Exception as e:  # noqa: BLE001
+            logger.debug("분기 추이 실패 → 연간: %s", e)
+    return history_annual(px, fin, sector, step, shares)
+
+
+def history_annual(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5, shares: float | None = None) -> list[list]:
     """과거 추이: [날짜, 분류, 린치 지표, 적정가 대비%] (주 1점).
 
     그 날짜에 이미 사업보고서로 공시된 연간 실적만 쓴다(미래 정보 차단). 저장된 연간 실적이 최근 3년뿐이라

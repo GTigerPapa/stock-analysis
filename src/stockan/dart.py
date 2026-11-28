@@ -198,6 +198,13 @@ def fin_summary(corp_code: str, year: int, reprt: str) -> dict | None:
             "cfo": _acct(rows, ("CF",), ("ifrs-full_CashFlowsFromUsedInOperatingActivities",),
                          ("영업활동현금흐름", "영업활동으로인한현금흐름", "영업활동순현금흐름")),
             "revenue": _acct(rows, ("IS", "CIS"), ("ifrs-full_Revenue",), ("매출액", "수익(매출액)", "영업수익", "매출"), cum=True),
+            # 손익(연초부터 누적, 원): 분기 단독값은 누적 차이로, 4분기는 사업보고서 − 3분기 누적으로 계산
+            "op": _acct(rows, ("IS", "CIS"), ("dart_OperatingIncomeLoss", "ifrs-full_OperatingIncomeLoss"),
+                        ("영업이익", "영업이익(손실)", "영업손익", "영업손실"), cum=True),
+            "ni": _acct(rows, ("IS", "CIS"), ("ifrs-full_ProfitLoss",),
+                        ("당기순이익", "당기순이익(손실)", "분기순이익", "분기순이익(손실)", "반기순이익", "반기순이익(손실)", "당기순손익"), cum=True),
+            "ni_own": _acct(rows, ("IS", "CIS"), ("ifrs-full_ProfitLossAttributableToOwnersOfParent",),
+                            ("지배기업의소유주에게귀속되는당기순이익", "지배기업소유주지분", "지배기업소유주", "지배주주지분순이익"), cum=True),
         }
     return None
 

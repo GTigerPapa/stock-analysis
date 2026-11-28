@@ -108,11 +108,17 @@ def export_details(df: pd.DataFrame) -> int:
     except Exception:  # noqa: BLE001
         live_g = {}
 
+    try:
+        _dis = read_df("SELECT * FROM dart_is")
+        dis_g = {k: g for k, g in _dis.groupby("code")} if not _dis.empty else {}
+    except Exception:  # noqa: BLE001
+        dis_g = {}
+
     def lynch_hist(code, rec):
         if lctx is None:
             return None
         try:
-            h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "", shares=lctx.shares.get(code))
+            h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "", shares=lctx.shares.get(code), dis=dis_g.get(code))
             h = [[r[0], r[1], _r(r[2]), _r(r[3], 1), _r(r[4], 1)] for r in h]
         except Exception:  # noqa: BLE001
             h = []

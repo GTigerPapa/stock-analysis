@@ -357,6 +357,7 @@ def update_ownership(codes: list[str] | None = None) -> None:
 
 # ---------------- 린치 점검용 DART 데이터 (재고·현금·영업현금흐름 / 임원 지분 / 자사주) ----------------
 LYNCH_SINCE_YEAR = 2025
+IS_SINCE_YEAR = 2022  # 손익(분기 최근 12개월 실적)은 더 길게: 2년 성장률을 2024년부터 계산
 
 
 def lynch_pool() -> list[str]:
@@ -383,40 +384,49 @@ def update_lynch_data(codes: list[str] | None = None) -> None:
     with session() as con:
         cmap = dict(con.execute("SELECT code, corp_code FROM dart_corp"))
         have = {(c, y, r) for c, y, r in con.execute("SELECT code, year, reprt FROM dart_fin")}
+        have_is = {(c, y, r) for c, y, r in con.execute("SELECT code, year, reprt FROM dart_is")}
     if not cmap:
         cmap = dart.corp_codes()
-    periods = dart.due_periods(LYNCH_SINCE_YEAR)
+    periods = dart.due_periods(IS_SINCE_YEAR)
     since = f"{LYNCH_SINCE_YEAR}-01-01"
     targets = [c for c in codes if c in cmap]
     stop = {"err": None}
 
     def job(code):
-        out = {"fin": [], "ins": [], "bb": []}
+        out = {"fin": [], "is": [], "ins": [], "bb": []}
         if stop["err"]:
             return out
         try:
             cc = cmap[code]
             for y, rc, age in periods:
-                if (code, y, rc) in have:
+                need_fin = y >= LYNCH_SINCE_YEAR and (code, y, rc) not in have
+                need_is = (code, y, rc) not in have_is
+                if not (need_fin or need_is):
                     continue
                 s = dart.fin_summary(cc, y, rc)
                 if s:
-                    out["fin"].append({"code": code, "year": y, "reprt": rc, **s})
+                    if need_fin:
+                        out["fin"].append({"code": code, "year": y, "reprt": rc, **{k: s.get(k) for k in ("fs_div", "rcept_no", "inventory", "cash", "cfo", "revenue")}})
+                    out["is"].append({"code": code, "year": y, "reprt": rc, "fs_div": s["fs_div"], "rev": s.get("revenue"),
+                                      "op": s.get("op"), "ni": s.get("ni"), "ni_own": s.get("ni_own")})
                 elif age > 45:  # 기한이 한참 지났는데도 없으면(결산월 다름·미제출) 다시 묻지 않게 표시
-                    out["fin"].append({"code": code, "year": y, "reprt": rc, "fs_div": "NONE", "rcept_no": None,
-                                       "inventory": None, "cash": None, "cfo": None, "revenue": None})
+                    if need_fin:
+                        out["fin"].append({"code": code, "year": y, "reprt": rc, "fs_div": "NONE", "rcept_no": None,
+                                           "inventory": None, "cash": None, "cfo": None, "revenue": None})
+                    out["is"].append({"code": code, "year": y, "reprt": rc, "fs_div": "NONE", "rev": None, "op": None, "ni": None, "ni_own": None})
             out["ins"] = dart.insider_rows(code, cc, since)
             out["bb"] = dart.buyback_rows(code, cc, since)
         except dart.DartError as e:
             stop["err"] = e
         return out
 
-    n = {"fin": 0, "ins": 0, "bb": 0}
+    n = {"fin": 0, "is": 0, "ins": 0, "bb": 0}
     with session() as con:
         for _, r in _parallel(job, targets, "린치", workers=min(WORKERS, 4)):
             n["fin"] += upsert(con, "dart_fin", r["fin"])
+            n["is"] += upsert(con, "dart_is", r["is"])
             n["ins"] += upsert(con, "insider", r["ins"])
             n["bb"] += upsert(con, "buyback", r["bb"])
-        log(con, "lynch", "fail" if stop["err"] else "ok", f"fin {n['fin']} / insider {n['ins']} / buyback {n['bb']} rows, {len(targets)} codes {stop['err'] or ''}")
+        log(con, "lynch", "fail" if stop["err"] else "ok", f"fin {n['fin']} / is {n['is']} / insider {n['ins']} / buyback {n['bb']} rows, {len(targets)} codes {stop['err'] or ''}")
     if stop["err"]:
         raise stop["err"]
