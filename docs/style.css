@@ -309,3 +309,13 @@ a.more { display: block; text-decoration: none; }
 .ly-z { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin: 8px 0 4px; }
 .ly-z > div { display: grid; gap: 2px; justify-items: start; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .ly-z small { color: var(--muted); }
+
+/* 린치 요약 (상세 맨 위) */
+.ly-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ly-tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 3px; }
+.ly-tile .k { font-size: 12px; color: var(--muted); }
+.ly-tile .v { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+.ly-sub { font-size: 11.5px; line-height: 1.45; }
+.ly-ax { font-size: 10px; fill: var(--muted); }
+.ly-ref { stroke: var(--line); stroke-dasharray: 3 3; }
+.ly-live { fill: #e8833a; stroke: var(--panel); stroke-width: 1; }

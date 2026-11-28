@@ -137,6 +137,91 @@ def _dart_block(code: str, rec: dict, ctx: Ctx, today: date) -> dict:
     return out
 
 
+def classify(g, rev_g, eps_base, pbr, sector: str, turnaround: bool) -> int:
+    """린치 6분류 (0 = 분류 불가). 현재값(analyze)과 과거 추이(history)가 같은 규칙을 쓴다."""
+    if turnaround:
+        return 5
+    if eps_base is None or g is None:
+        return 6 if (pbr and pbr <= 0.5 and eps_base) else 0
+    if g < 0:
+        return 0  # 이익 감소 중
+    if sector in CYCLICAL:
+        return 4
+    if g >= 20 and (rev_g is None or rev_g >= 10):
+        return 3  # 이익과 매출이 함께 크는 경우만 고성장주
+    if pbr and pbr <= 0.5:
+        return 6
+    if g >= 8:
+        return 2
+    return 1
+
+
+def price_metrics(close, eps_base, g, div, cat: int) -> tuple:
+    """(린치 지표, 적정가 대비 %) — analyze 와 같은 공식."""
+    if not (close and eps_base and eps_base > 0 and g is not None) or cat == 5:
+        return None, None
+    per = close / eps_base
+    g_use = float(np.clip(g, -50, G_CAP))
+    ratio = round((g_use + (div or 0.0)) / per, 2)
+    gap = round((close / (eps_base * g_use) - 1) * 100, 1) if g_use >= 5 else None
+    return ratio, gap
+
+
+def _avail(period: str) -> str:
+    """연간 실적이 사업보고서로 알려지는 날(대략): 결산월 말 + 90일. (12월 결산 → 다음 해 3월 말)"""
+    y, m = int(period[:4]), int(period[4:6])
+    end = (date(y, m, 28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    return (end + timedelta(days=90)).isoformat()
+
+
+def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5) -> list[list]:
+    """과거 추이: [날짜, 분류, 린치 지표, 적정가 대비%] (주 1점).
+
+    그 날짜에 이미 사업보고서로 공시된 연간 실적만 쓴다(미래 정보 차단). 저장된 연간 실적이 최근 3년뿐이라
+    추이는 '연간 실적이 2년 이상 공시된 시점'부터 나온다. 과거 컨센서스는 저장돼 있지 않아서
+    현재값(실적과 컨센서스 중 낮은 성장률, 예상 EPS 기준)과 달리 실적만으로 계산한다.
+    """
+    if fin is None or px is None or px.empty:
+        return []
+    a = fin[(fin.period_type == "annual") & (fin.is_consensus == 0) & fin.item.isin(["EPS", "매출액", "BPS", "주당배당금"])]
+    if a.empty:
+        return []
+    piv = a.pivot_table(index="period", columns="item", values="value").sort_index()
+    if "EPS" not in piv:
+        return []
+    col = lambda c: [(_f(v) if c in piv else None) for v in (piv[c] if c in piv else [None] * len(piv))]
+    eps, rev, bps, dps = col("EPS"), col("매출액"), col("BPS"), col("주당배당금")
+    avail = [_avail(str(p)) for p in piv.index]
+    p2 = px[px.date >= (avail[1] if len(avail) > 1 else "9999")]
+    if p2.empty:
+        return []
+    sel = list(range(len(p2) - 1, -1, -step))[::-1]
+    out = []
+
+    def cagr(v, k, n):
+        x0, x1 = v[k - n], v[k]
+        return ((x1 / x0) ** (1 / n) - 1) * 100 if (x0 and x1 and x0 > 0 and x1 > 0) else None
+
+    for j in sel:
+        d, close = p2.date.iloc[j], _f(p2.close.iloc[j])
+        k = int(np.searchsorted(avail, d, side="right")) - 1
+        if k < 1 or not close:
+            continue
+        n = min(2, k)
+        g = cagr(eps, k, n)
+        if g is None and eps[k - n] and eps[k - n] > 0 and eps[k] is not None and eps[k] <= 0:
+            g = -100.0  # 흑자 → 적자
+        rev_g = cagr(rev, k, n)
+        turn = bool(eps[k] and eps[k] > 0 and eps[k - 1] is not None and eps[k - 1] <= 0)
+        eps_base = eps[k] if (eps[k] and eps[k] > 0) else None
+        pbr = close / bps[k] if bps[k] and bps[k] > 0 else None
+        div = (dps[k] or 0) / close * 100
+        cat = classify(g, rev_g, eps_base, pbr, sector, turn)
+        ratio, gap = price_metrics(close, eps_base, g, div, cat)
+        out.append([d, cat, ratio, gap])
+    return out
+
+
 def analyze(rec: dict, ctx: Ctx, today: date | None = None) -> tuple[dict, dict]:
     """한 종목 → (features 에 넣을 숫자 필드, 스토리 카드 dict)."""
     today = today or date.today()
@@ -165,22 +250,7 @@ def analyze(rec: dict, ctx: Ctx, today: date | None = None) -> tuple[dict, dict]
     per = close / eps_base if (close and eps_base) else None
 
     # ---- 6분류 ----
-    if turnaround:
-        cat = 5
-    elif eps_base is None or g is None:
-        cat = 6 if (pbr and pbr <= 0.5 and eps_base) else 0
-    elif g < 0:
-        cat = 0  # 이익 감소 중
-    elif sector in CYCLICAL:
-        cat = 4
-    elif g >= 20 and (rev_g is None or rev_g >= 10):
-        cat = 3  # 이익과 매출이 함께 크는 경우만 고성장주
-    elif pbr and pbr <= 0.5:
-        cat = 6
-    elif g >= 8:
-        cat = 2
-    else:
-        cat = 1
+    cat = classify(g, rev_g, eps_base, pbr, sector, turnaround)
     out["lynch_cat_n"], out["lynch_cat"] = cat, CATS[cat]
 
     # ---- 린치 지표 · 적정가 ----

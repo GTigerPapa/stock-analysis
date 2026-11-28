@@ -98,6 +98,26 @@ def export_details(df: pd.DataFrame) -> int:
         logger.warning("린치 카드 건너뜀: %s", e)
         lynch, lctx = None, None
 
+    # 린치 추이: 과거(실적 기준, 주 1점) + 실시간 기록(features 에 매일 저장된 컨센서스 반영 값)
+    mo_g = {k: g for k, g in mo.groupby("code")}
+    try:
+        lv = read_df("""SELECT code, date, json_extract(payload,'$.lynch_cat_n') AS c, json_extract(payload,'$.lynch_ratio') AS r,
+                               json_extract(payload,'$.lynch_gap') AS g FROM features
+                        WHERE json_extract(payload,'$.lynch_cat_n') IS NOT NULL ORDER BY code, date""")
+        live_g = {k: [[r.date, int(r.c), _r(r.r), _r(r.g, 1)] for r in g.itertuples()] for k, g in lv.groupby("code")}
+    except Exception:  # noqa: BLE001
+        live_g = {}
+
+    def lynch_hist(code, rec):
+        if lctx is None:
+            return None
+        try:
+            h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "")
+            h = [[r[0], r[1], _r(r[2]), _r(r[3], 1)] for r in h]
+        except Exception:  # noqa: BLE001
+            h = []
+        return {"h": h, "live": live_g.get(code, [])}
+
     def lynch_card(rec):
         if lctx is None:
             return None
@@ -129,6 +149,7 @@ def export_details(df: pd.DataFrame) -> int:
             "y0": [] if code not in yg else [[r.y, r.d0, _r(r.c0, 0)] for r in yg[code].itertuples()],
             "own": own_block(code, i),
             "lynch": lynch_card(rec),
+            "lyh": lynch_hist(code, rec),
             "fq": fin_rows(fg.get(code), "quarter"),
             "fa": fin_rows(fg.get(code), "annual"),
         }

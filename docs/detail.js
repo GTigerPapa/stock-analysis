@@ -65,6 +65,8 @@
       <div class="dh"><div class="meta">${code} · ${esc(d.market || "")} · 시총 ${fmt.won(f.marcap)}</div><h2>${esc(d.name)}
         ${curStage ? `<span class="stage-badge s${curStage}">${STAGE[curStage][0]}</span>` : ""}</h2>
         <div class="px">${fmt.n(f.close)}<small class="${fmt.cls(f.ret_1d)}">${fmt.pct(f.ret_1d)}</small>${f.nxt_close && f.nxt_close !== f.close ? `<small class="mut">NXT ${fmt.n(f.nxt_close)} (${fmt.pct(f.nxt_gap, 2)})</small>` : ""}</div></div>
+      <div class="sec ly-head"><h4>린치 요약 <span class="seg mini" id="lyhSeg"><button data-v="126">6개월</button><button data-v="250" class="on">1년</button><button data-v="9999">전체</button></span>
+        <span class="mut">선 = 실적 기준 과거 추이(주 1점) · ● = 매일 기록한 현재 방식 값(컨센서스 반영)</span></h4><div id="lyTop"></div><div id="lyHist" class="svgbox"></div></div>
       <div class="desc">${d.desc ? esc(d.desc) : `<span class="mut">종목 설명이 아직 수집되지 않았습니다(주 1회 갱신).</span>`}
         <div class="links"><a href="${dart}" target="_blank" rel="noopener">DART 공시·사업보고서 ↗</a><a href="${naverUrl}" target="_blank" rel="noopener">네이버 증권 ↗</a></div></div>
       ${verdict(f)}
@@ -121,6 +123,10 @@
       $("#finSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawFin(d, b.dataset.v);
     });
     drawLynch(d);
+    drawLynchTop(d, 250);
+    $("#lyhSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
+      $("#lyhSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawLynchTop(d, +b.dataset.v);
+    });
     drawCalendar(d);
     drawOwnership(d, "float");
     $("#ownSeg").querySelectorAll("button").forEach(b => b.onclick = () => {
@@ -373,6 +379,69 @@
     let lastM = "";
     inv.forEach(r => { const m = r[0].slice(0, 7); if (m !== lastM && new Date(r[0]).getDate() <= 7) { lastM = m; s += `<text x="${40 + wk(r[0]) * (cell + gapW)}" y="8" class="ax">${m.slice(2).replace("-", ".")}</text>`; } });
     el.innerHTML = s + `</svg><div class="legend"><span>순매도</span><span class="lg">${[-1, -.5, 0].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}</span><span>순매수</span><span class="lg">${[.5, 1].map(v => `<i style="background:${COL[1](v * .25)}"></i>`).join("")}${[.5, 1].map(v => `<i style="background:${COL[2](v * .25)}"></i>`).join("")}</span><span class="mut">순매수 = 고유색 진하게(<span class="c-frgn">외국인</span>/<span class="c-inst">기관</span>) · 순매도 = 회색 진하게 · 평균 거래량의 ±25%에서 가장 진함</span></div>`;
+  }
+
+  // ---------- 린치 요약 (맨 위): 분류 · 린치 지표 · 적정가 대비 + 기간별 추이 ----------
+  const LY_CAT = { 0: ["분류 불가", "#b8bcc2"], 1: ["저성장주", "#8f98a3"], 2: ["대형우량주", "#2f6f6a"], 3: ["고성장주", "#2e9e5b"],
+    4: ["경기순환주", "#d08a2e"], 5: ["회생주", "#7b61c9"], 6: ["자산주", "#3b82c4"] };
+  function drawLynchTop(d, days) {
+    const top = $("#lyTop"), box = $("#lyHist"), L = d.lynch, H = (d.lyh && d.lyh.h) || [], live = (d.lyh && d.lyh.live) || [];
+    if (!top || !box) return;
+    if (!L) { top.innerHTML = `<div class="mut small">린치 분석 데이터가 아직 없습니다 (다음 정기 실행 후 표시)</div>`; box.innerHTML = ""; return; }
+    const pct = (v, n = 0) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(n) + "%";
+    const num = v => v == null ? "–" : v.toFixed(2);
+    const last = H.length ? H[H.length - 1] : null;
+    const ago = n => { if (!H.length) return null; const t = new Date(H[H.length - 1][0]); t.setDate(t.getDate() - n); const s = t.toISOString().slice(0, 10);
+      let r = null; for (const h of H) { if (h[0] <= s) r = h; else break; } return r; };
+    const pts = [["3개월 전", ago(91)], ["1년 전", ago(365)]];
+    const ratioCls = v => v == null ? "mut" : v >= 1.5 ? "fl-up" : v >= 1 ? "" : "fl-dn";
+    const gapCls = v => v == null ? "mut" : v < 0 ? "fl-up" : "fl-dn";
+    // 분류가 바뀐 시점들
+    const changes = []; for (let i = 1; i < H.length; i++) if (H[i][1] !== H[i - 1][1]) changes.push(`${H[i][0].slice(2, 7)} ${LY_CAT[H[i - 1][1]][0]}→${LY_CAT[H[i][1]][0]}`);
+    const sub = (fn, cls) => `<div class="ly-sub">실적 기준: 지금 <b class="${cls(last && fn(last))}">${last ? fnTxt(fn, last) : "–"}</b>${pts.map(([k, r]) => ` · ${k} <span class="${cls(r && fn(r))}">${r ? fnTxt(fn, r) : "–"}</span>`).join("")}</div>`;
+    let fnTxt = (fn, r) => fn === F.cat ? LY_CAT[r[1]][0] : fn === F.ratio ? num(r[2]) : pct(r[3]);
+    const F = { cat: r => r[1], ratio: r => r[2], gap: r => r[3] };
+    top.innerHTML = `<div class="ly-tiles">
+      <div class="ly-tile"><div class="k">린치 분류</div><div class="v"><span class="badge ly-cat" style="background:${LY_CAT[L.cat_n][1]};color:#fff">${esc(L.cat)}</span></div>
+        <div class="ly-sub">실적 기준: ${last ? LY_CAT[last[1]][0] : "–"}${pts.map(([k, r]) => ` · ${k} ${r ? LY_CAT[r[1]][0] : "–"}`).join("")}</div>
+        ${changes.length ? `<div class="ly-sub mut">변경: ${esc(changes.slice(-3).join(", "))}</div>` : ""}</div>
+      <div class="ly-tile"><div class="k" title="(이익 성장률 + 배당수익률) ÷ PER. 2 이상 매력, 1.5 양호, 1 미만 부족">린치 지표</div><div class="v ${ratioCls(L.ratio)}">${num(L.ratio)}</div>
+        ${sub(F.ratio, ratioCls)}</div>
+      <div class="ly-tile"><div class="k" title="적정가(EPS × 성장률) 대비 현재가. 음수 = 적정가보다 쌈">적정가 대비</div><div class="v ${gapCls(L.gap)}">${pct(L.gap)}</div>
+        ${L.zone ? `<div class="ly-sub"><span class="badge ${L.zone.startsWith("매수") ? "st-good" : L.zone.startsWith("매도") ? "st-bad" : "st-na"}">${esc(L.zone)}</span>${L.zones ? ` 적정가 ${Math.round(L.zones.fair).toLocaleString()}원` : ""}</div>` : ""}
+        ${sub(F.gap, gapCls)}</div></div>`;
+    // ---- 추이 차트 ----
+    const hs = H.slice(-Math.ceil(days / 5) - 1);
+    if (hs.length < 2) { box.innerHTML = `<div class="mut small">과거 추이를 계산할 연간 실적이 부족합니다</div>`; return; }
+    const d0 = hs[0][0], d1 = [hs[hs.length - 1][0], ...live.map(r => r[0])].sort().pop();
+    const lv = live.filter(r => r[0] >= d0);
+    const W = 640, P = 34, R = 40, t0 = Date.parse(d0), t1 = Math.max(Date.parse(d1), t0 + 864e5);
+    const X = s => P + (Date.parse(s) - t0) / (t1 - t0) * (W - P - R);
+    const panel = (y0, h, vals, lo, hi, refs, fmtv, idx, color) => {
+      const all = vals.filter(v => v != null); if (!all.length) return `<text x="${P}" y="${y0 + h / 2}" class="ly-ax">값 없음 (이익 감소·적자 구간)</text>`;
+      let mn = Math.max(lo, Math.min(...all, ...refs)), mx = Math.min(hi, Math.max(...all, ...refs)); if (mx - mn < 1e-6) { mx += 1; mn -= 1; }
+      const Y = v => y0 + h - (Math.max(mn, Math.min(mx, v)) - mn) / (mx - mn) * h;
+      let g = refs.map(r => `<line x1="${P}" x2="${W - R}" y1="${Y(r)}" y2="${Y(r)}" class="ly-ref"/><text x="${W - R + 3}" y="${Y(r) + 3}" class="ly-ax">${fmtv(r)}</text>`).join("");
+      let path = "", pen = false;
+      hs.forEach(r => { const v = r[idx]; if (v == null) { pen = false; return; } path += `${pen ? "L" : "M"}${X(r[0]).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; });
+      g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
+      g += lv.filter(r => r[idx] != null).map(r => `<circle cx="${X(r[0]).toFixed(1)}" cy="${Y(r[idx]).toFixed(1)}" r="3" class="ly-live"><title>${r[0]} ${fmtv(r[idx])} (현재 방식)</title></circle>`).join("");
+      return g;
+    };
+    // 분류 띠
+    let band = "";
+    hs.forEach((r, i) => { const xa = X(r[0]), xb = i < hs.length - 1 ? X(hs[i + 1][0]) : W - R; band += `<rect x="${xa.toFixed(1)}" y="4" width="${Math.max(1, xb - xa).toFixed(1)}" height="12" fill="${LY_CAT[r[1]][1]}"><title>${r[0]} ${LY_CAT[r[1]][0]}</title></rect>`; });
+    const used = [...new Set(hs.map(r => r[1]))];
+    const legend = used.map((c, i) => `<rect x="${P + i * 82}" y="22" width="9" height="9" fill="${LY_CAT[c][1]}"/><text x="${P + 12 + i * 82}" y="30" class="ly-ax">${LY_CAT[c][0]}</text>`).join("");
+    const ticks = []; let lastM = ""; hs.forEach(r => { const m = r[0].slice(0, 7); if (m !== lastM && (+m.slice(5) % (days > 300 ? 3 : 1) === 0 || days <= 130)) { ticks.push(r[0]); } lastM = m; });
+    const tk = []; ticks.forEach(t => { if (!tk.length || X(t) - X(tk[tk.length - 1]) >= 40) tk.push(t); });
+    const tx = tk.map(t => `<text x="${X(t).toFixed(1)}" y="262" class="ly-ax" text-anchor="middle">${t.slice(2, 7).replace("-", ".")}</text>`).join("");
+    box.innerHTML = `<svg viewBox="0 0 ${W} 268" width="100%">
+      <text x="2" y="14" class="ly-ax">분류</text>${band}${legend}
+      <text x="2" y="52" class="ly-ax">린치 지표</text>${panel(44, 88, hs.map(r => r[2]), -1.5, 5, [0, 1, 1.5, 2], v => v.toFixed(1), 2, "var(--accent)")}
+      <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, hs.map(r => r[3]), -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)")}
+      ${tx}</svg>
+      <div class="mut small">과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 선이 끊긴 구간은 이익이 줄거나 적자라 적정가를 계산하지 않은 기간입니다.</div>`;
   }
 
   // ---------- 린치 스토리 카드 ----------
