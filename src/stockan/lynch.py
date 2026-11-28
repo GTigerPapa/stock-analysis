@@ -29,7 +29,7 @@ BUY_K, SELL_K = (0.8, 0.65, 0.5), (1.2, 1.5)
 ZONES = {3: "매수 3차", 2: "매수 2차", 1: "매수 1차", 0: "관망", -1: "매도 1차", -2: "매도 2차"}
 G_CAP = 30.0  # 린치: 연 30%를 넘는 성장은 오래가기 어렵다 → 지표·적정가 계산에는 30%까지만 인정
 FIELDS = ["lynch_cat", "lynch_cat_n", "lynch_g", "lynch_rev_g", "lynch_per", "lynch_peg", "lynch_ratio", "lynch_fair", "lynch_gap",
-          "lynch_zone", "lynch_zone_n", "inv_gap", "cash_mcap", "insider_net_6m", "buyback_12m_pct", "lynch_bad"]
+          "lynch_zone", "lynch_zone_n", "lynch_g_op", "lynch_ratio_op", "lynch_fair_op", "lynch_gap_op", "inv_gap", "cash_mcap", "insider_net_6m", "buyback_12m_pct", "lynch_bad"]
 
 
 def _f(v):
@@ -167,6 +167,27 @@ def price_metrics(close, eps_base, g, div, cat: int) -> tuple:
     return ratio, gap
 
 
+TAX = 0.22  # 본업 기준 정상 이익 = 영업이익 × (1 − 법인세율 가정)
+
+
+def op_fallback(op_start, op_base, years, shares, close, div):
+    """본업(영업이익) 기준 대체 적정가: EPS가 줄었거나 영업외손익으로 왜곡된 종목용.
+
+    정상 EPS = 영업이익(억원) × 1e8 × (1 − 세율) ÷ 주식 수, 성장률 = 영업이익 연평균 성장률(5~30%만 사용).
+    반환: (성장률, 린치 지표, 적정가, 적정가 대비%) — 조건이 안 되면 None 들.
+    """
+    if not (op_start and op_base and op_start > 0 and op_base > 0 and years and years >= 1 and shares and close):
+        return None, None, None, None
+    g = ((op_base / op_start) ** (1 / years) - 1) * 100
+    if g < 5:
+        return round(g, 1), None, None, None
+    eps_n = op_base * 1e8 * (1 - TAX) / shares
+    g_use = min(g, G_CAP)
+    ratio = round((g_use + (div or 0.0)) / (close / eps_n), 2)
+    fair = eps_n * g_use
+    return round(g, 1), ratio, round(fair), round((close / fair - 1) * 100, 1)
+
+
 def _avail(period: str) -> str:
     """연간 실적이 사업보고서로 알려지는 날(대략): 결산월 말 + 90일. (12월 결산 → 다음 해 3월 말)"""
     y, m = int(period[:4]), int(period[4:6])
@@ -174,7 +195,7 @@ def _avail(period: str) -> str:
     return (end + timedelta(days=90)).isoformat()
 
 
-def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5) -> list[list]:
+def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int = 5, shares: float | None = None) -> list[list]:
     """과거 추이: [날짜, 분류, 린치 지표, 적정가 대비%] (주 1점).
 
     그 날짜에 이미 사업보고서로 공시된 연간 실적만 쓴다(미래 정보 차단). 저장된 연간 실적이 최근 3년뿐이라
@@ -183,14 +204,14 @@ def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int =
     """
     if fin is None or px is None or px.empty:
         return []
-    a = fin[(fin.period_type == "annual") & (fin.is_consensus == 0) & fin.item.isin(["EPS", "매출액", "BPS", "주당배당금"])]
+    a = fin[(fin.period_type == "annual") & (fin.is_consensus == 0) & fin.item.isin(["EPS", "매출액", "BPS", "주당배당금", "영업이익"])]
     if a.empty:
         return []
     piv = a.pivot_table(index="period", columns="item", values="value").sort_index()
     if "EPS" not in piv:
         return []
     col = lambda c: [(_f(v) if c in piv else None) for v in (piv[c] if c in piv else [None] * len(piv))]
-    eps, rev, bps, dps = col("EPS"), col("매출액"), col("BPS"), col("주당배당금")
+    eps, rev, bps, dps, opi = col("EPS"), col("매출액"), col("BPS"), col("주당배당금"), col("영업이익")
     avail = [_avail(str(p)) for p in piv.index]
     p2 = px[px.date >= (avail[1] if len(avail) > 1 else "9999")]
     if p2.empty:
@@ -218,7 +239,10 @@ def history(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step: int =
         div = (dps[k] or 0) / close * 100
         cat = classify(g, rev_g, eps_base, pbr, sector, turn)
         ratio, gap = price_metrics(close, eps_base, g, div, cat)
-        out.append([d, cat, ratio, gap])
+        gap_op = None
+        if gap is None and cat != 5:
+            gap_op = op_fallback(opi[k - n], opi[k], n, shares, close, div)[3]
+        out.append([d, cat, ratio, gap, gap_op])
     return out
 
 
@@ -268,6 +292,26 @@ def analyze(rec: dict, ctx: Ctx, today: date | None = None) -> tuple[dict, dict]
             zn = 3 if k <= BUY_K[2] else 2 if k <= BUY_K[1] else 1 if k <= BUY_K[0] else 0 if k < SELL_K[0] else -1 if k < SELL_K[1] else -2
             out["lynch_zone_n"], out["lynch_zone"] = zn, ZONES[zn]
             zones = {"fair": round(fair), "buy": [round(fair * x) for x in BUY_K], "sell": [round(fair * x) for x in SELL_K]}
+
+    # ---- 본업 기준 대체 적정가 (EPS 기준이 안 될 때) ----
+    op_card = None
+    if out["lynch_gap"] is None and cat != 5 and fin is not None:
+        oa = fin[(fin.period_type == "annual") & (fin.item == "영업이익")].sort_values("period")
+        op_act = [(str(r.period), _f(r.value)) for r in oa[oa.is_consensus == 0].itertuples() if _f(r.value) is not None]
+        op_con = [(str(r.period), _f(r.value)) for r in oa[oa.is_consensus == 1].itertuples() if _f(r.value) is not None]
+        if op_act:
+            base = op_con[0] if (op_con and op_con[0][1] > 0) else op_act[-1]
+            start = op_act[0]
+            yrs = int(base[0][:4]) - int(start[0][:4])
+            g_op, r_op, f_op, gap_op = op_fallback(start[1], base[1], yrs, _f(ctx.shares.get(code)), close, div)
+            out["lynch_g_op"], out["lynch_ratio_op"], out["lynch_fair_op"], out["lynch_gap_op"] = g_op, r_op, f_op, gap_op
+            if f_op:
+                k = close / f_op
+                zn = 3 if k <= BUY_K[2] else 2 if k <= BUY_K[1] else 1 if k <= BUY_K[0] else 0 if k < SELL_K[0] else -1 if k < SELL_K[1] else -2
+                op_card = {"g": g_op, "ratio": r_op, "fair": f_op, "gap": gap_op, "zone": ZONES[zn], "zone_n": zn,
+                           "span": f"{start[0][:4]}→{base[0][:4]}{'(예상)' if base in op_con else ''}",
+                           "op0": start[1], "op1": base[1], "tax": TAX,
+                           "zones": {"fair": f_op, "buy": [round(f_op * x) for x in BUY_K], "sell": [round(f_op * x) for x in SELL_K]}}
 
     dx = _dart_block(code, rec, ctx, today)
     for k in ("inv_gap", "cash_mcap", "insider_net_6m", "buyback_12m_pct"):
@@ -355,6 +399,7 @@ def analyze(rec: dict, ctx: Ctx, today: date | None = None) -> tuple[dict, dict]
         "g": out["lynch_g"], "rev_g": out["lynch_rev_g"], "g_cap": G_CAP, "per": out["lynch_per"], "peg": out["lynch_peg"], "ratio": out["lynch_ratio"], "div": round(div, 2),
         "zones": zones, "zone": out["lynch_zone"], "gap": out["lynch_gap"], "checks": checks,
         "insiders": dx["insiders"], "buybacks": dx["buybacks"], "fin_asof": dx["fin_asof"],
+        "op": op_card,
         "zone_note": ("경기순환주·자산주는 PER 기반 적정가가 잘 맞지 않는다. 참고만 할 것." if cat in (4, 6) else None),
     }
     return out, card

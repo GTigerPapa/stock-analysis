@@ -102,9 +102,9 @@ def export_details(df: pd.DataFrame) -> int:
     mo_g = {k: g for k, g in mo.groupby("code")}
     try:
         lv = read_df("""SELECT code, date, json_extract(payload,'$.lynch_cat_n') AS c, json_extract(payload,'$.lynch_ratio') AS r,
-                               json_extract(payload,'$.lynch_gap') AS g FROM features
+                               json_extract(payload,'$.lynch_gap') AS g, json_extract(payload,'$.lynch_gap_op') AS go FROM features
                         WHERE json_extract(payload,'$.lynch_cat_n') IS NOT NULL ORDER BY code, date""")
-        live_g = {k: [[r.date, int(r.c), _r(r.r), _r(r.g, 1)] for r in g.itertuples()] for k, g in lv.groupby("code")}
+        live_g = {k: [[r.date, int(r.c), _r(r.r), _r(r.g, 1), _r(r.go, 1)] for r in g.itertuples()] for k, g in lv.groupby("code")}
     except Exception:  # noqa: BLE001
         live_g = {}
 
@@ -112,8 +112,8 @@ def export_details(df: pd.DataFrame) -> int:
         if lctx is None:
             return None
         try:
-            h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "")
-            h = [[r[0], r[1], _r(r[2]), _r(r[3], 1)] for r in h]
+            h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "", shares=lctx.shares.get(code))
+            h = [[r[0], r[1], _r(r[2]), _r(r[3], 1), _r(r[4], 1)] for r in h]
         except Exception:  # noqa: BLE001
             h = []
         return {"h": h, "live": live_g.get(code, [])}

@@ -428,8 +428,13 @@
         <div class="ly-sub">실적 기준: ${last ? LY_CAT[last[1]][0] : "–"}${pts.map(([k, r]) => ` · ${k} ${r ? LY_CAT[r[1]][0] : "–"}`).join("")}</div>
         ${changes.length ? `<div class="ly-sub mut">변경: ${esc(changes.slice(-3).join(", "))}</div>` : ""}</div>
       <div class="ly-tile"><div class="k">${tip("린치 지표", TIP_RATIO)}</div><div class="v ${ratioCls(L.ratio)}">${num(L.ratio)}</div>
+        ${L.op && L.op.ratio != null ? `<div class="ly-sub">본업 기준 <b class="${ratioCls(L.op.ratio)}">${num(L.op.ratio)}</b> <span class="mut">(영업이익 기준 정상 EPS)</span></div>` : ""}
         ${sub(F.ratio, ratioCls)}</div>
-      <div class="ly-tile"><div class="k">${tip("적정가 대비", TIP_GAP)}</div><div class="v ${gapCls(L.gap)}">${pct(L.gap)}</div>
+      <div class="ly-tile"><div class="k">${tip("적정가 대비", TIP_GAP)}</div>
+        ${L.gap == null && L.op && L.op.gap != null ? `<div class="v ${gapCls(L.op.gap)}">${pct(L.op.gap)} <span class="badge st-na ly-opb" title="EPS 기준 적정가를 계산할 수 없어 영업이익으로 계산한 대체값">본업 기준</span></div>
+        <div class="ly-sub"><span class="badge ${L.op.zone_n > 0 ? "st-good" : L.op.zone_n < 0 ? "st-bad" : "st-na"}">${esc(L.op.zone)}</span> 적정가 ${Math.round(L.op.fair).toLocaleString()}원</div>
+        <div class="ly-sub mut">EPS가 줄어 원래 공식은 계산 불가 → 영업이익 ${L.op.span} 연 ${pct(L.op.g)} 성장(최대 ${L.g_cap}% 인정), 세율 ${Math.round(L.op.tax * 100)}% 가정으로 만든 정상 EPS 기준</div>`
+        : `<div class="v ${gapCls(L.gap)}">${pct(L.gap)}</div>`}
         ${L.zone ? `<div class="ly-sub"><span class="badge ${L.zone.startsWith("매수") ? "st-good" : L.zone.startsWith("매도") ? "st-bad" : "st-na"}">${esc(L.zone)}</span>${L.zones ? ` 적정가 ${Math.round(L.zones.fair).toLocaleString()}원` : ""}</div>` : ""}
         ${sub(F.gap, gapCls)}</div></div>`;
     // ---- 추이 차트 ----
@@ -439,7 +444,7 @@
     const lv = live.filter(r => r[0] >= d0);
     const W = 640, P = 34, R = 40, t0 = Date.parse(d0), t1 = Math.max(Date.parse(d1), t0 + 864e5);
     const X = s => P + (Date.parse(s) - t0) / (t1 - t0) * (W - P - R);
-    const panel = (y0, h, vals, lo, hi, refs, fmtv, idx, color, mainRef) => {
+    const panel = (y0, h, vals, lo, hi, refs, fmtv, idx, color, mainRef, alt) => {
       const all = vals.filter(v => v != null); if (!all.length) return `<text x="${P}" y="${y0 + h / 2}" class="ly-ax">값 없음 (이익 감소·적자 구간)</text>`;
       let mn = Math.max(lo, Math.min(...all, ...refs)), mx = Math.min(hi, Math.max(...all, ...refs)); if (mx - mn < 1e-6) { mx += 1; mn -= 1; }
       const Y = v => y0 + h - (Math.max(mn, Math.min(mx, v)) - mn) / (mx - mn) * h;
@@ -448,12 +453,19 @@
       let gaps = "", gs = null;
       const flush = (i) => { if (gs == null) return; const xa = X(hs[gs][0]), xb = i < hs.length ? X(hs[i][0]) : W - R;
         gaps += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(2, xb - xa).toFixed(1)}" height="${h}" class="ly-na"/>`;
-        if (xb - xa > 120) gaps += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${y0 + h / 2 + 4}" class="ly-ax" text-anchor="middle">계산 불가 · 이익 감소 또는 적자 (적정가 = EPS × 성장률)</text>`; gs = null; };
-      hs.forEach((r, i) => { if (r[idx] == null) { if (gs == null) gs = i; } else flush(i); }); flush(hs.length);
+        if (xb - xa > 120) gaps += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${y0 + h / 2 + 4}" class="ly-ax" text-anchor="middle">계산 불가 · 순이익과 영업이익 모두 감소 또는 적자</text>`; gs = null; };
+      const none = r => r[idx] == null && (alt == null || r[alt] == null);
+      hs.forEach((r, i) => { if (none(r)) { if (gs == null) gs = i; } else flush(i); }); flush(hs.length);
       g = gaps + g;
       let path = "", pen = false;
       hs.forEach(r => { const v = r[idx]; if (v == null) { pen = false; return; } path += `${pen ? "L" : "M"}${X(r[0]).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; });
       g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
+      if (alt != null) {  // EPS 기준이 없는 구간: 본업(영업이익) 기준 대체값을 점선으로
+        let pa = "", pn = false;
+        hs.forEach(r => { const v = r[idx] == null ? r[alt] : null; if (v == null) { pn = false; return; } pa += `${pn ? "L" : "M"}${X(r[0]).toFixed(1)},${Y(v).toFixed(1)}`; pn = true; });
+        if (pa) g += `<path d="${pa}" fill="none" stroke="${color}" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+        g += lv.filter(r => r[idx] == null && r[alt] != null).map(r => `<circle cx="${X(r[0]).toFixed(1)}" cy="${Y(r[alt]).toFixed(1)}" r="3.2" class="ly-live-op"><title>${r[0]} ${fmtv(r[alt])} (본업 기준 대체값)</title></circle>`).join("");
+      }
       g += lv.filter(r => r[idx] != null).map(r => `<circle cx="${X(r[0]).toFixed(1)}" cy="${Y(r[idx]).toFixed(1)}" r="3" class="ly-live"><title>${r[0]} ${fmtv(r[idx])} (현재 방식)</title></circle>`).join("");
       return g;
     };
@@ -468,9 +480,9 @@
     box.innerHTML = `<svg viewBox="0 0 ${W} 268" width="100%">
       <text x="2" y="14" class="ly-ax">분류</text>${band}${legend}
       <text x="2" y="52" class="ly-ax">린치 지표</text>${panel(44, 88, hs.map(r => r[2]), -1.5, 5, [0, 1, 1.5, 2], v => v.toFixed(1), 2, "var(--accent)", 1)}
-      <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, hs.map(r => r[3]), -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)", 0)}
+      <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, [...hs.map(r => r[3] ?? r[4]), ...lv.map(r => r[3] ?? r[4])], -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)", 0, 4)}
       ${tx}</svg>
-      <div class="mut small">과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 선이 끊긴 구간은 이익이 줄거나 적자라 적정가를 계산하지 않은 기간입니다.</div>`;
+      <div class="mut small">과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 점선·빈 원 = EPS 기준이 안 되는 구간에 영업이익으로 계산한 '본업 기준' 대체값. 회색 구간은 영업이익도 줄었거나 적자라 둘 다 계산할 수 없는 기간입니다.</div>`;
   }
 
   // ---------- 린치 스토리 카드 ----------

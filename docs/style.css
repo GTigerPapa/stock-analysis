@@ -340,3 +340,5 @@ a.more { display: block; text-decoration: none; }
 .lm-hic { stroke: var(--text); stroke-width: 2.2; opacity: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
 .lm-cat { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
 .lm-dots circle.lm-clip { fill-opacity: .15; stroke-width: 1.6; }
+.ly-live-op { fill: var(--panel); stroke: #e8833a; stroke-width: 1.8; }
+.ly-opb { font-size: 11px; vertical-align: middle; font-family: var(--sans); font-weight: 600; }

@@ -29,7 +29,7 @@ UNIVERSE_COLS = [
     "frgn_net_5_pct", "inst_net_5_pct", "frgn_net_20_pct", "inst_net_20_pct",
     "tt_score", "from_low52", "ma200_chg_21", "atr14_pct", "stop_atr2_pct",
     "roe", "debt_ratio", "lynch_cat", "lynch_cat_n", "lynch_g", "lynch_rev_g", "lynch_per", "lynch_peg", "lynch_ratio", "lynch_fair", "lynch_gap",
-    "lynch_zone", "lynch_zone_n", "inv_gap", "cash_mcap", "insider_net_6m", "buyback_12m_pct", "lynch_bad",
+    "lynch_zone", "lynch_zone_n", "lynch_gap_op", "lynch_ratio_op", "inv_gap", "cash_mcap", "insider_net_6m", "buyback_12m_pct", "lynch_bad",
 ]
 PRESET_COLS = ["rank", "score"] + UNIVERSE_COLS
 
