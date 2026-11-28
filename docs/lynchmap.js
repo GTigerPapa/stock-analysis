@@ -4,7 +4,7 @@
   const CAT = { 0: ["분류 불가", "#b8bcc2"], 1: ["저성장주", "#8f98a3"], 2: ["대형우량주", "#2f6f6a"], 3: ["고성장주", "#2e9e5b"],
     4: ["경기순환주", "#d08a2e"], 5: ["회생주", "#7b61c9"], 6: ["자산주", "#3b82c4"] };
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const L = { liquid: true };
+  const L = { liquid: true, only: null };  // only = 범례에서 고른 분류 하나만 보기 (null = 전체)
   try { Object.assign(L, JSON.parse(localStorage.getItem("lmap.v1") || "{}")); } catch (e) { /* 무시 */ }
   const save = () => { try { localStorage.setItem("lmap.v1", JSON.stringify(L)); } catch (e) { /* 무시 */ } };
   let tip;
@@ -30,7 +30,10 @@
     if (!el || !state.universe) return;
     const holds = new Set((state.latest.watchlist || []).map(w => w.code));
     const all = state.universe.filter(r => (!L.liquid || (r.amount_avg20 || 0) >= 1e9));
-    let rows = all.filter(r => r.lynch_ratio != null && r.lynch_gap != null);
+    const base = all.filter(r => r.lynch_ratio != null && r.lynch_gap != null);
+    const used = [...new Set(base.map(r => r.lynch_cat_n ?? 0))].sort();
+    if (L.only != null && !used.includes(L.only)) L.only = null;
+    let rows = L.only == null ? base : base.filter(r => (r.lynch_cat_n ?? 0) === L.only);
     const W = Math.max(320, el.clientWidth), H = Math.round(Math.max(340, Math.min(560, W * 0.55)));
     const m = { l: 62, r: 14, t: 14, b: 40 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
     const xmax = XMAX, cl = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -81,12 +84,17 @@
       c.addEventListener("mouseleave", () => { el.querySelector(".lm-hi").innerHTML = ""; hideTip(); });
       c.addEventListener("click", () => { hideTip(); openDetail(r.code); });
     });
-    const used = [...new Set(rows.map(r => r.lynch_cat_n ?? 0))].sort();
     const noGap = all.filter(r => r.lynch_ratio != null && r.lynch_gap == null).length;
-    $("#lynchLegend").innerHTML = used.map(c => `<span><i style="background:${CAT[c][1]}"></i>${CAT[c][0]}</span>`).join("")
+    const cnt = c => base.filter(r => (r.lynch_cat_n ?? 0) === c).length;
+    $("#lynchLegend").innerHTML = used.map(c => `<span class="lm-lg${L.only == null || L.only === c ? "" : " off"}${L.only === c ? " on" : ""}" data-c="${c}" title="누르면 ${CAT[c][0]}만 보기 · 다시 누르면 전체"><i style="background:${CAT[c][1]}"></i>${CAT[c][0]} ${cnt(c)}</span>`).join("")
+      + (L.only != null ? `<span class="lm-lg lm-all" data-c="all">전체 보기</span>` : "")
       + `<span>점 크기 = 시가총액</span><span><i class="ring"></i>보유 종목</span>`
       + `<span class="mut">${rows.length}종목 표시 · 이익 감소·성장률 5% 미만 등으로 적정가가 없는 ${noGap}종목은 제외 · 빈 원 = 축 범위(지표 10, 적정가 +150%) 밖이라 가장자리에 표시</span>`;
     // 모바일에서 누르기 쉬운 목록: 싸고 성장 구역
+    $("#lynchLegend").querySelectorAll(".lm-lg").forEach(sp => sp.onclick = () => {
+      const c = sp.dataset.c === "all" ? null : +sp.dataset.c;
+      L.only = c == null || L.only === c ? null : c; save(); hideTip(); render();
+    });
     const list = rows.filter(r => r.lynch_ratio >= 1.5 && r.lynch_gap <= -20).sort((a, b) => b.lynch_ratio - a.lynch_ratio).slice(0, 15);
     $("#lynchList").innerHTML = list.length ? `<div class="cg-h">싸고 성장 구역 (${list.length}) <span class="mut">린치 지표 높은 순 · 컨센서스가 낡았을 수 있으니 확인 필요</span></div>
       <div class="ol">${list.map(r => `<button data-code="${r.code}"><span>${esc(r.name)}</span><span><b>${r.lynch_ratio.toFixed(2)}</b></span><span class="${r.lynch_gap < 0 ? "fl-up" : "fl-dn"}">${fmt.pct(r.lynch_gap, 0)}</span><span class="mut small">${esc(r.lynch_cat || "")}</span></button>`).join("")}</div>` : "";

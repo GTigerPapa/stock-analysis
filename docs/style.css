@@ -342,3 +342,8 @@ a.more { display: block; text-decoration: none; }
 .lm-dots circle.lm-clip { fill-opacity: .15; stroke-width: 1.6; }
 .ly-live-op { fill: var(--panel); stroke: #e8833a; stroke-width: 1.8; }
 .ly-opb { font-size: 11px; vertical-align: middle; font-family: var(--sans); font-weight: 600; }
+.lm-lg { cursor: pointer; padding: 2px 8px; border-radius: 12px; border: 1px solid transparent; user-select: none; }
+.lm-lg:hover { border-color: var(--line); }
+.lm-lg.on { border-color: var(--text); font-weight: 700; }
+.lm-lg.off { opacity: .4; }
+.lm-lg.lm-all { border-color: var(--line); color: var(--accent); }
