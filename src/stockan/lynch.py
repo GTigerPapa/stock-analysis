@@ -188,6 +188,11 @@ def op_fallback(op_start, op_base, years, shares, close, div):
     return round(g, 1), ratio, round(fair), round((close / fair - 1) * 100, 1)
 
 
+def _shaky(g) -> int:
+    """성장률이 5~8%로 계산 하한에 걸쳐 있으면 1. 적정가 = EPS × 성장률이라 이 구간은 값이 극단적으로 튄다."""
+    return 1 if (g is not None and 5 <= g < 8) else 0
+
+
 def _avail(period: str) -> str:
     """연간 실적이 사업보고서로 알려지는 날(대략): 결산월 말 + 90일. (12월 결산 → 다음 해 3월 말)"""
     y, m = int(period[:4]), int(period[4:6])
@@ -287,10 +292,11 @@ def history_q(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, ttm: list
         div = (dps_y[dd_[kd]] or 0) / close * 100 if kd >= 0 else 0.0
         cat = classify(g, rev_g, eps_base, pbr, sector, turn)
         ratio, gap = price_metrics(close, eps_base, g, div, cat)
-        gap_op = None
+        gap_op, g_op = None, None
         if gap is None and cat != 5:
-            gap_op = op_fallback(base[4], o, yrs, shares, close, div)[3]
-        out.append([d, cat, ratio, gap, gap_op])
+            fb = op_fallback(base[4], o, yrs, shares, close, div)
+            g_op, gap_op = fb[0], fb[3]
+        out.append([d, cat, ratio, gap, gap_op, _shaky(g if gap is not None else g_op)])
     return out
 
 
@@ -352,10 +358,11 @@ def history_annual(px: pd.DataFrame, fin: pd.DataFrame | None, sector: str, step
         div = (dps[k] or 0) / close * 100
         cat = classify(g, rev_g, eps_base, pbr, sector, turn)
         ratio, gap = price_metrics(close, eps_base, g, div, cat)
-        gap_op = None
+        gap_op, g_op = None, None
         if gap is None and cat != 5:
-            gap_op = op_fallback(opi[k - n], opi[k], n, shares, close, div)[3]
-        out.append([d, cat, ratio, gap, gap_op])
+            fb = op_fallback(opi[k - n], opi[k], n, shares, close, div)
+            g_op, gap_op = fb[0], fb[3]
+        out.append([d, cat, ratio, gap, gap_op, _shaky(g if gap is not None else g_op)])
     return out
 
 

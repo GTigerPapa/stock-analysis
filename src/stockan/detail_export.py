@@ -119,7 +119,7 @@ def export_details(df: pd.DataFrame) -> int:
             return None
         try:
             h = lynch.history(mo_g.get(code), fg.get(code), rec.get("sector_name") or "", shares=lctx.shares.get(code), dis=dis_g.get(code))
-            h = [[r[0], r[1], _r(r[2]), _r(r[3], 1), _r(r[4], 1)] for r in h]
+            h = [[r[0], r[1], _r(r[2]), _r(r[3], 1), _r(r[4], 1), (r[5] if len(r) > 5 else 0)] for r in h]
         except Exception:  # noqa: BLE001
             h = []
         try:
