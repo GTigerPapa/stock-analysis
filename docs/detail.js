@@ -404,13 +404,32 @@
     const sub = (fn, cls) => `<div class="ly-sub">실적 기준: 지금 <b class="${cls(last && fn(last))}">${last ? fnTxt(fn, last) : "–"}</b>${pts.map(([k, r]) => ` · ${k} <span class="${cls(r && fn(r))}">${r ? fnTxt(fn, r) : "–"}</span>`).join("")}</div>`;
     let fnTxt = (fn, r) => fn === F.cat ? LY_CAT[r[1]][0] : fn === F.ratio ? num(r[2]) : pct(r[3]);
     const F = { cat: r => r[1], ratio: r => r[2], gap: r => r[3] };
+    // 제목 툴팁: PC는 마우스 올리기, 휴대폰은 제목 터치
+    const tip = (label, body) => `<span class="ly-tip" tabindex="0">${label} <i>ⓘ</i><span class="ly-tipbox">${body}</span></span>`;
+    const TIP_CAT = `<b>피터 린치의 6분류</b> (『전설로 떠나는 월가의 영웅』). 종류마다 기대 수익과 파는 시점이 다릅니다.
+      <table><tr><td>저성장주</td><td>이익 성장 연 0~8%. 배당이 보유 이유</td></tr>
+      <tr><td>대형우량주</td><td>연 8~20%. 30~50% 오르면 일부 차익</td></tr>
+      <tr><td>고성장주</td><td>이익 연 20% 이상 + 매출 연 10% 이상. 성장이 이어지는 동안 보유</td></tr>
+      <tr><td>경기순환주</td><td>반도체·화학·철강·조선·해운·건설·자동차 등. PER이 가장 낮아 보일 때가 위험</td></tr>
+      <tr><td>회생주</td><td>적자에서 흑자로 돌아서는 중</td></tr>
+      <tr><td>자산주</td><td>PBR 0.5 이하. 자산 가치가 드러날 계기가 핵심</td></tr>
+      <tr><td>분류 불가</td><td>이익 감소·적자·데이터 부족</td></tr></table>
+      이익 성장률 = 최근 2년 EPS 연평균과 컨센서스 성장률 중 낮은 쪽.`;
+    const TIP_RATIO = `<b>린치 지표 = (이익 성장률 + 배당수익률) ÷ PER</b><br>성장과 배당에 비해 주가가 얼마나 싼지. 성장률은 최대 30%까지만 인정, PER은 예상 EPS 기준.
+      <table><tr><td>2 이상</td><td>매력적</td></tr><tr><td>1.5 ~ 2</td><td>양호</td></tr><tr><td>1 ~ 1.5</td><td>보통 (1 = 적정)</td></tr>
+      <tr><td>0 ~ 1</td><td>부족 (성장에 비해 비쌈)</td></tr><tr><td>0 미만</td><td>이익 감소 중</td></tr></table>
+      경기순환주는 이익이 정점일 때 지표가 가장 좋아 보이므로 주의.`;
+    const TIP_GAP = `<b>적정가 대비 = 현재가 ÷ 적정가 − 1</b><br>적정가 = 예상 EPS × 이익 성장률(5~30%). 'PER이 성장률과 같을 때'의 가격입니다.
+      <table><tr><td>−50% 이하</td><td>매수 3차</td></tr><tr><td>−35% 이하</td><td>매수 2차</td></tr><tr><td>−20% 이하</td><td>매수 1차</td></tr>
+      <tr><td>−20 ~ +20%</td><td>관망</td></tr><tr><td>+20% 이상</td><td>매도 1차</td></tr><tr><td>+50% 이상</td><td>매도 2차</td></tr></table>
+      '–' = 이익 성장률이 5% 미만·음수이거나 회생주라 계산 안 함. 경기순환주·자산주는 참고만. 컨센서스가 낙관적이면 적정가도 높게 나옵니다.`;
     top.innerHTML = `<div class="ly-tiles">
-      <div class="ly-tile"><div class="k">린치 분류</div><div class="v"><span class="badge ly-cat" style="background:${LY_CAT[L.cat_n][1]};color:#fff">${esc(L.cat)}</span></div>
+      <div class="ly-tile"><div class="k">${tip("린치 분류", TIP_CAT)}</div><div class="v"><span class="badge ly-cat" style="background:${LY_CAT[L.cat_n][1]};color:#fff">${esc(L.cat)}</span></div>
         <div class="ly-sub">실적 기준: ${last ? LY_CAT[last[1]][0] : "–"}${pts.map(([k, r]) => ` · ${k} ${r ? LY_CAT[r[1]][0] : "–"}`).join("")}</div>
         ${changes.length ? `<div class="ly-sub mut">변경: ${esc(changes.slice(-3).join(", "))}</div>` : ""}</div>
-      <div class="ly-tile"><div class="k" title="(이익 성장률 + 배당수익률) ÷ PER. 2 이상 매력, 1.5 양호, 1 미만 부족">린치 지표</div><div class="v ${ratioCls(L.ratio)}">${num(L.ratio)}</div>
+      <div class="ly-tile"><div class="k">${tip("린치 지표", TIP_RATIO)}</div><div class="v ${ratioCls(L.ratio)}">${num(L.ratio)}</div>
         ${sub(F.ratio, ratioCls)}</div>
-      <div class="ly-tile"><div class="k" title="적정가(EPS × 성장률) 대비 현재가. 음수 = 적정가보다 쌈">적정가 대비</div><div class="v ${gapCls(L.gap)}">${pct(L.gap)}</div>
+      <div class="ly-tile"><div class="k">${tip("적정가 대비", TIP_GAP)}</div><div class="v ${gapCls(L.gap)}">${pct(L.gap)}</div>
         ${L.zone ? `<div class="ly-sub"><span class="badge ${L.zone.startsWith("매수") ? "st-good" : L.zone.startsWith("매도") ? "st-bad" : "st-na"}">${esc(L.zone)}</span>${L.zones ? ` 적정가 ${Math.round(L.zones.fair).toLocaleString()}원` : ""}</div>` : ""}
         ${sub(F.gap, gapCls)}</div></div>`;
     // ---- 추이 차트 ----
@@ -420,11 +439,11 @@
     const lv = live.filter(r => r[0] >= d0);
     const W = 640, P = 34, R = 40, t0 = Date.parse(d0), t1 = Math.max(Date.parse(d1), t0 + 864e5);
     const X = s => P + (Date.parse(s) - t0) / (t1 - t0) * (W - P - R);
-    const panel = (y0, h, vals, lo, hi, refs, fmtv, idx, color) => {
+    const panel = (y0, h, vals, lo, hi, refs, fmtv, idx, color, mainRef) => {
       const all = vals.filter(v => v != null); if (!all.length) return `<text x="${P}" y="${y0 + h / 2}" class="ly-ax">값 없음 (이익 감소·적자 구간)</text>`;
       let mn = Math.max(lo, Math.min(...all, ...refs)), mx = Math.min(hi, Math.max(...all, ...refs)); if (mx - mn < 1e-6) { mx += 1; mn -= 1; }
       const Y = v => y0 + h - (Math.max(mn, Math.min(mx, v)) - mn) / (mx - mn) * h;
-      let g = refs.map(r => `<line x1="${P}" x2="${W - R}" y1="${Y(r)}" y2="${Y(r)}" class="ly-ref"/><text x="${W - R + 3}" y="${Y(r) + 3}" class="ly-ax">${fmtv(r)}</text>`).join("");
+      let g = refs.map(r => `<line x1="${P}" x2="${W - R}" y1="${Y(r)}" y2="${Y(r)}" class="${r === mainRef ? "ly-ref-main" : "ly-ref"}"/><text x="${W - R + 3}" y="${Y(r) + 3}" class="ly-ax">${fmtv(r)}</text>`).join("");
       // 값이 없는 구간(이익 감소·적자로 계산 불가)은 회색으로 칠하고 이유를 적는다
       let gaps = "", gs = null;
       const flush = (i) => { if (gs == null) return; const xa = X(hs[gs][0]), xb = i < hs.length ? X(hs[i][0]) : W - R;
@@ -448,8 +467,8 @@
     const tx = tk.map(t => `<text x="${X(t).toFixed(1)}" y="262" class="ly-ax" text-anchor="middle">${t.slice(2, 7).replace("-", ".")}</text>`).join("");
     box.innerHTML = `<svg viewBox="0 0 ${W} 268" width="100%">
       <text x="2" y="14" class="ly-ax">분류</text>${band}${legend}
-      <text x="2" y="52" class="ly-ax">린치 지표</text>${panel(44, 88, hs.map(r => r[2]), -1.5, 5, [0, 1, 1.5, 2], v => v.toFixed(1), 2, "var(--accent)")}
-      <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, hs.map(r => r[3]), -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)")}
+      <text x="2" y="52" class="ly-ax">린치 지표</text>${panel(44, 88, hs.map(r => r[2]), -1.5, 5, [0, 1, 1.5, 2], v => v.toFixed(1), 2, "var(--accent)", 1)}
+      <text x="2" y="160" class="ly-ax">적정가 대비</text>${panel(152, 92, hs.map(r => r[3]), -90, 200, [-50, -35, -20, 0, 20, 50], v => (v > 0 ? "+" : "") + v.toFixed(0) + "%", 3, "var(--down)", 0)}
       ${tx}</svg>
       <div class="mut small">과거 추이는 그 시점에 공시된 연간 실적만으로 계산(2년 연평균 이익 성장률, 최근 연간 EPS 기준)해서, 맨 위 현재값(컨센서스 반영)과 다를 수 있습니다. 적정가 대비 기준선: −20%·−35%·−50% = 매수 1·2·3차, +20%·+50% = 매도 1·2차. 선이 끊긴 구간은 이익이 줄거나 적자라 적정가를 계산하지 않은 기간입니다.</div>`;
   }
