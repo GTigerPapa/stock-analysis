@@ -319,3 +319,4 @@ a.more { display: block; text-decoration: none; }
 .ly-ax { font-size: 10px; fill: var(--muted); }
 .ly-ref { stroke: var(--line); stroke-dasharray: 3 3; }
 .ly-live { fill: #e8833a; stroke: var(--panel); stroke-width: 1; }
+.ly-na { fill: var(--line); opacity: .45; }

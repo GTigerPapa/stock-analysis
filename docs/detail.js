@@ -425,6 +425,13 @@
       let mn = Math.max(lo, Math.min(...all, ...refs)), mx = Math.min(hi, Math.max(...all, ...refs)); if (mx - mn < 1e-6) { mx += 1; mn -= 1; }
       const Y = v => y0 + h - (Math.max(mn, Math.min(mx, v)) - mn) / (mx - mn) * h;
       let g = refs.map(r => `<line x1="${P}" x2="${W - R}" y1="${Y(r)}" y2="${Y(r)}" class="ly-ref"/><text x="${W - R + 3}" y="${Y(r) + 3}" class="ly-ax">${fmtv(r)}</text>`).join("");
+      // 값이 없는 구간(이익 감소·적자로 계산 불가)은 회색으로 칠하고 이유를 적는다
+      let gaps = "", gs = null;
+      const flush = (i) => { if (gs == null) return; const xa = X(hs[gs][0]), xb = i < hs.length ? X(hs[i][0]) : W - R;
+        gaps += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(2, xb - xa).toFixed(1)}" height="${h}" class="ly-na"/>`;
+        if (xb - xa > 120) gaps += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${y0 + h / 2 + 4}" class="ly-ax" text-anchor="middle">계산 불가 · 이익 감소 또는 적자 (적정가 = EPS × 성장률)</text>`; gs = null; };
+      hs.forEach((r, i) => { if (r[idx] == null) { if (gs == null) gs = i; } else flush(i); }); flush(hs.length);
+      g = gaps + g;
       let path = "", pen = false;
       hs.forEach(r => { const v = r[idx]; if (v == null) { pen = false; return; } path += `${pen ? "L" : "M"}${X(r[0]).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; });
       g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>`;

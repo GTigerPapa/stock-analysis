@@ -373,7 +373,21 @@ function switchTab(id) {
   if (id === "map" && window.renderMap) window.renderMap();
   if (id === "sector" && window.renderSectorTab) window.renderSectorTab();
 }
+// 링크로 평단·수량 가져오기: ...#pos=<base64 JSON {코드: {avg, qty}}> → 이 기기 브라우저에만 저장하고 주소에서 지움
+function importPositions() {
+  const m = location.hash.match(/^#pos=([A-Za-z0-9_\-+/=]+)$/);
+  if (!m) return;
+  try {
+    const data = JSON.parse(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const all = loadPos();
+    Object.entries(data).forEach(([k, v]) => { all[k] = { avg: String(v.avg), qty: String(v.qty) }; });
+    savePos(all);
+    history.replaceState(null, "", location.pathname + location.search);
+    setTimeout(() => alert(`보유 종목 ${Object.keys(data).length}개의 평단·수량을 이 기기에 저장했습니다.`), 300);
+  } catch (e) { console.error("평단 가져오기 실패", e); }
+}
 async function init() {
+  importPositions();
   $("#tabs").onclick = e => { const b = e.target.closest("button"); if (b) switchTab(b.dataset.tab); };
   $("#closeDetail").onclick = closeDetail; $("#scrim").onclick = closeDetail;
   addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
